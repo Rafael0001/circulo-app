@@ -1,0 +1,93 @@
+@import "tailwindcss";
+
+:root {
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+  line-height: 1.5;
+  font-weight: 400;
+  color: #1f2937;
+  background-color: #f8f4ee;
+  font-synthesis: none;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+html {
+  background: #f8f4ee;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  background:
+    radial-gradient(circle at top, rgba(248, 217, 171, 0.4), transparent 30%),
+    linear-gradient(180deg, #fff9f3 0%, #f8f4ee 100%);
+}
+
+#root {
+  min-height: 100vh;
+}
+
+button,
+input,
+select,
+textarea {
+  font: inherit;
+}
+
+@keyframes pulse-ring {
+  0% {
+    transform: scale(0.8);
+    opacity: 0.8;
+  }
+  100% {
+    transform: scale(1.35);
+    opacity: 0;
+  }
+}
+
+@keyframes centerPulse {
+  0% {
+    opacity: 0.4;
+    transform: scale(0.9);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.7);
+  }
+}
+
+@keyframes modalIn {
+  0% {
+    opacity: 0;
+    transform: translateY(20px) scale(0.97);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.pulse-ring {
+  animation: pulse-ring 2.2s ease-out infinite;
+  transform-origin: center;
+  transform-box: fill-box;
+}
+
+.pulse-ring-delayed {
+  animation-delay: 0.7s;
+}
+
+.pulse-ring-delayed-2 {
+  animation-delay: 1.4s;
+}
+
+.center-pulse {
+  transform-origin: center;
+  transform-box: fill-box;
+  animation: centerPulse 1.4s ease-out infinite;
+}
+
+.center-pulse-delayed {
+  animation-delay: 0.4s;
+}
