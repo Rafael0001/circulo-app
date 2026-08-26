@@ -1,5 +1,7 @@
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
+import { FriendsProvider } from './hooks/useFriends'
+import { PulsosProvider } from './hooks/usePulsos'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Cadastro from './pages/Cadastro'
@@ -23,44 +25,48 @@ function ProtectedRoute({ children }) {
 
 export default function App() {
   return (
-    <BrowserRouter>
-      <Routes>
-        <Route path="/login" element={<Login />} />
-        <Route path="/cadastro" element={<Cadastro />} />
-        <Route
-          path="/"
-          element={
-            <ProtectedRoute>
-              <Home />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/adicionar-amigo"
-          element={
-            <ProtectedRoute>
-              <AdicionarAmigo />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/criar-pulso"
-          element={
-            <ProtectedRoute>
-              <CriarPulso />
-            </ProtectedRoute>
-          }
-        />
-        <Route
-          path="/perfil"
-          element={
-            <ProtectedRoute>
-              <Perfil />
-            </ProtectedRoute>
-          }
-        />
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
-    </BrowserRouter>
+    <FriendsProvider>
+      <PulsosProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/login" element={<Login />} />
+            <Route path="/cadastro" element={<Cadastro />} />
+            <Route
+              path="/"
+              element={
+                <ProtectedRoute>
+                  <Home />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/adicionar-amigo"
+              element={
+                <ProtectedRoute>
+                  <AdicionarAmigo />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/criar-pulso"
+              element={
+                <ProtectedRoute>
+                  <CriarPulso />
+                </ProtectedRoute>
+              }
+            />
+            <Route
+              path="/perfil"
+              element={
+                <ProtectedRoute>
+                  <Perfil />
+                </ProtectedRoute>
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </PulsosProvider>
+    </FriendsProvider>
   )
 }

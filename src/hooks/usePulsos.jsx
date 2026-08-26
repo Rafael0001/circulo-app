@@ -1,5 +1,7 @@
-import { useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
+
+const STORAGE_KEY = 'circulo_pulsos'
 
 const initialPulsos = [
   {
@@ -76,10 +78,31 @@ const initialPulsos = [
   },
 ]
 
-export function usePulsos() {
-  const [pulsos, setPulsos] = useState(initialPulsos)
+const PulsosContext = createContext(null)
 
-  const criarPulso = async ({ category, content, circle_visibility = 'amigos', user_id = 'demo-user' }) => {
+function readPulsos() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return initialPulsos
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : initialPulsos
+  } catch {
+    return initialPulsos
+  }
+}
+
+export function PulsosProvider({ children }) {
+  const [pulsos, setPulsos] = useState(readPulsos)
+
+  useEffect(() => {
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(pulsos))
+    } catch {
+      // ignore quota / private mode
+    }
+  }, [pulsos])
+
+  const criarPulso = useCallback(async ({ category, content, circle_visibility = 'amigos', user_id = 'demo-user' }) => {
     const payload = {
       user_id,
       category,
@@ -92,14 +115,12 @@ export function usePulsos() {
       const { data, error } = await supabase.from('pulsos').insert([payload]).select().single()
 
       if (!error && data) {
-        setPulsos((current) => [
-          {
-            ...data,
-            author: 'Você',
-          },
-          ...current,
-        ])
-        return { data, error: null }
+        const nextPulso = {
+          ...data,
+          author: data.author ?? 'Você',
+        }
+        setPulsos((current) => [nextPulso, ...current])
+        return { data: nextPulso, error: null }
       }
 
       return { data: null, error }
@@ -113,9 +134,25 @@ export function usePulsos() {
 
     setPulsos((current) => [localPulso, ...current])
     return { data: localPulso, error: null }
+  }, [])
+
+  const createPulso = useCallback(async (newPulso) => criarPulso(newPulso), [criarPulso])
+
+  const value = useMemo(
+    () => ({ pulsos, createPulso, criarPulso }),
+    [pulsos, createPulso, criarPulso],
+  )
+
+  return <PulsosContext.Provider value={value}>{children}</PulsosContext.Provider>
+}
+
+/* eslint-disable react-refresh/only-export-components -- hook shares the provider module */
+export function usePulsos() {
+  const context = useContext(PulsosContext)
+
+  if (!context) {
+    throw new Error('usePulsos must be used within PulsosProvider')
   }
 
-  const createPulso = async (newPulso) => criarPulso(newPulso)
-
-  return { pulsos, createPulso, criarPulso }
+  return context
 }
