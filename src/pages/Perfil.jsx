@@ -1,6 +1,8 @@
 import { useState } from 'react'
 import NavBar from '../components/NavBar'
 
+const STORAGE_KEY = 'circulo_profile'
+
 const defaultProfile = {
   name: 'Ana',
   bio: 'Amo encontros espontâneos, café e conversar de verdade.',
@@ -9,9 +11,21 @@ const defaultProfile = {
 
 const interestOptions = ['café', 'viagens', 'música', 'livros', 'natureza', 'fotografia', 'arte', 'saúde']
 
+function readProfile() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY)
+    if (!raw) return defaultProfile
+    const parsed = JSON.parse(raw)
+    return { ...defaultProfile, ...parsed }
+  } catch {
+    return defaultProfile
+  }
+}
+
 export default function Perfil() {
-  const [profile, setProfile] = useState(defaultProfile)
-  const [draft, setDraft] = useState(defaultProfile)
+  const [profile, setProfile] = useState(readProfile)
+  const [draft, setDraft] = useState(profile)
+  const [saved, setSaved] = useState(false)
 
   const toggleInterest = (interest) => {
     const updated = draft.interests.includes(interest)
@@ -23,6 +37,13 @@ export default function Perfil() {
 
   const handleSave = () => {
     setProfile(draft)
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(draft))
+    } catch {
+      // ignore
+    }
+    setSaved(true)
+    window.setTimeout(() => setSaved(false), 1400)
   }
 
   return (
@@ -32,19 +53,23 @@ export default function Perfil() {
           <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[#90795e]">perfil</p>
           <h1 className="mt-2 text-3xl font-semibold text-[#2e2926]">Você</h1>
         </div>
-        <button type="button" onClick={handleSave} className="rounded-full bg-[#f3e6d3] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7f5b3d]">
-          salvar
+        <button
+          type="button"
+          onClick={handleSave}
+          className="rounded-full bg-[#f3e6d3] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7f5b3d]"
+        >
+          {saved ? 'salvo' : 'salvar'}
         </button>
       </header>
 
       <div className="rounded-[30px] border border-[#f0e6d8] bg-white/85 p-5 shadow-[0_14px_36px_rgba(166,139,107,0.08)]">
         <div className="flex items-center gap-4">
           <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#f4d9b5] text-xl font-semibold text-[#40382f]">
-            {profile.name.slice(0, 2).toUpperCase()}
+            {profile.name.slice(0, 2).toUpperCase() || 'VO'}
           </div>
           <div>
             <p className="text-lg font-semibold text-[#2a231f]">{profile.name}</p>
-            <p className="text-sm text-[#7d6d62]">@ana</p>
+            <p className="text-sm text-[#7d6d62]">@{profile.name.toLowerCase().replace(/\s+/g, '')}</p>
           </div>
         </div>
 

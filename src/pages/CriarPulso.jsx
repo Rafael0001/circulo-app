@@ -15,15 +15,15 @@ export default function CriarPulso() {
   const { createPulso } = usePulsos()
   const [form, setForm] = useState({
     category: 'necessidade',
-    content: 'Tô precisando de um encontro leve e sem cobrança.',
+    content: '',
     circle_visibility: 'conhecidos',
   })
 
-  const handleSubmit = (event) => {
+  const handleSubmit = async (event) => {
     event.preventDefault()
     if (!form.content.trim()) return
 
-    createPulso({
+    await createPulso({
       category: form.category,
       content: form.content.trim(),
       circle_visibility: form.circle_visibility,

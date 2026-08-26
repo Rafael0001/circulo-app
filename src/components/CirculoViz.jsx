@@ -27,15 +27,17 @@ function polarToCartesian(angle, radius) {
   }
 }
 
-export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePulso }) {
+export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePulso, selectedCircle = 'todos' }) {
   const [selectedId, setSelectedId] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [pulsoStep, setPulsoStep] = useState(1)
   const [pulsoCategory, setPulsoCategory] = useState('necessidade')
+  const [pulsoVisibility, setPulsoVisibility] = useState('amigos')
   const [pulsoText, setPulsoText] = useState('')
   const [centerHovered, setCenterHovered] = useState(false)
   const [centerBurst, setCenterBurst] = useState(false)
   const [popoverLift, setPopoverLift] = useState(0)
+  const [isDragging, setIsDragging] = useState(false)
   const dragStartRef = useRef({ y: 0, lift: 0 })
   const isDraggingRef = useRef(false)
   const dragHandleRef = useRef(null)
@@ -81,6 +83,7 @@ export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePuls
     setPulsoStep(1)
     setPulsoText('')
     setPulsoCategory('necessidade')
+    setPulsoVisibility('amigos')
   }
 
   const closeFriendPopover = () => {
@@ -95,6 +98,7 @@ export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePuls
 
     event.preventDefault()
     isDraggingRef.current = true
+    setIsDragging(true)
     dragStartRef.current = { y: event.clientY, lift: popoverLift }
 
     if (dragHandleRef.current) {
@@ -118,6 +122,7 @@ export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePuls
     }
 
     isDraggingRef.current = false
+    setIsDragging(false)
 
     if (event && dragHandleRef.current && event.pointerId !== undefined) {
       dragHandleRef.current.releasePointerCapture(event.pointerId)
@@ -150,7 +155,7 @@ export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePuls
     await onCreatePulso({
       category: pulsoCategory,
       content,
-      circle_visibility: 'amigos',
+      circle_visibility: pulsoVisibility,
     })
 
     setCenterBurst(true)
@@ -212,12 +217,14 @@ export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePuls
               const size = circleName === 'intimos' ? 36 : circleName === 'amigos' ? 30 : 26
               const isSelected = selected?.id === friend.id
               const hasPulse = Boolean((pulseMap[friend.name] ?? []).length)
+              const isDimmed = selectedCircle !== 'todos' && friend.circle !== selectedCircle
 
               return (
                 <g
                   key={friend.id}
                   transform={`translate(${300 + pos.x}, ${300 + pos.y})`}
                   className="cursor-pointer"
+                  opacity={isDimmed ? 0.28 : 1}
                   onClick={() => setSelectedId(isSelected ? null : friend.id)}
                 >
                   {hasPulse && (
@@ -334,7 +341,7 @@ export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePuls
                   className="flex-1 space-y-2"
                   style={{
                     transform: `translateY(-${popoverLift}px)`,
-                    transition: isDraggingRef.current ? 'none' : 'transform 0.2s ease',
+                    transition: isDragging ? 'none' : 'transform 0.2s ease',
                   }}
                 >
                   {selectedPulsos.map((pulso) => (
@@ -438,10 +445,23 @@ export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePuls
                     </span>
                   </div>
 
+                  <label className="mb-3 block text-sm text-[#5a4b3f]">
+                    Visível para
+                    <select
+                      value={pulsoVisibility}
+                      onChange={(event) => setPulsoVisibility(event.target.value)}
+                      className="mt-1 w-full rounded-2xl border border-[#eddcc7] bg-[#fffaf4] px-3 py-2.5 text-sm outline-none transition focus:border-[#d4a86d]"
+                    >
+                      <option value="intimos">íntimos</option>
+                      <option value="amigos">amigos</option>
+                      <option value="conhecidos">conhecidos</option>
+                    </select>
+                  </label>
+
                   <textarea
                     value={pulsoText}
                     onChange={(event) => setPulsoText(event.target.value)}
-                    rows={6}
+                    rows={5}
                     placeholder="Escreva seu pulso..."
                     className="w-full resize-none rounded-[14px] border border-[#f0e7de] bg-[#fffaf4] p-3 text-sm text-[#372f2a] outline-none placeholder:text-[#ad9b8b] focus:border-[#d3b888]"
                   />
