@@ -16,7 +16,8 @@ function initialsFromName(name) {
 
 export default function AdicionarAmigo() {
   const navigate = useNavigate()
-  const { addFriend } = useFriends()
+  const { addFriend, circles } = useFriends()
+  const outerCircle = circles[circles.length - 1]
   const [token, setToken] = useState(() => `circulo-${Math.random().toString(36).slice(2, 10)}`)
   const [qrImage, setQrImage] = useState('')
   const [scanValue, setScanValue] = useState('')
@@ -68,7 +69,7 @@ export default function AdicionarAmigo() {
     const nextFriend = addFriend({
       name,
       initials: initialsFromName(name),
-      circle: 'conhecidos',
+      circle: outerCircle?.id,
       avatarColor: AVATAR_COLORS[Math.floor(Math.random() * AVATAR_COLORS.length)],
     })
 
@@ -83,7 +84,9 @@ export default function AdicionarAmigo() {
           <div className="mx-auto mb-4 flex w-20 items-center justify-center rounded-full bg-[#eaf7ef] p-3 text-3xl">✨</div>
           <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[#7e9a79]">novo vínculo</p>
           <h1 className="mt-3 text-2xl font-semibold text-[#2a231f]">Amizade criada</h1>
-          <p className="mt-2 text-sm text-[#7d6d62]">{addedFriend.name} entrou em conhecidos</p>
+          <p className="mt-2 text-sm text-[#7d6d62]">
+            {addedFriend.name} entrou em {circles.find((circle) => circle.id === addedFriend.circle)?.label ?? 'seu círculo'}
+          </p>
 
           <div className="mt-5 flex items-center justify-center gap-4">
             <div

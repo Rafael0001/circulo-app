@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import NavBar from '../components/NavBar'
+import { useFriends } from '../hooks/useFriends'
 import { usePulsos } from '../hooks/usePulsos'
 
 const categoryOptions = [
@@ -13,11 +14,17 @@ const categoryOptions = [
 export default function CriarPulso() {
   const navigate = useNavigate()
   const { createPulso } = usePulsos()
+  const { circles } = useFriends()
+  const defaultVisibility = circles[circles.length - 1]?.id ?? ''
   const [form, setForm] = useState({
     category: 'necessidade',
     content: '',
-    circle_visibility: 'conhecidos',
+    circle_visibility: defaultVisibility,
   })
+  const visibilityValue = useMemo(
+    () => (circles.some((circle) => circle.id === form.circle_visibility) ? form.circle_visibility : defaultVisibility),
+    [circles, defaultVisibility, form.circle_visibility],
+  )
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -26,7 +33,7 @@ export default function CriarPulso() {
     await createPulso({
       category: form.category,
       content: form.content.trim(),
-      circle_visibility: form.circle_visibility,
+      circle_visibility: visibilityValue,
     })
 
     navigate('/')
@@ -58,13 +65,15 @@ export default function CriarPulso() {
         <label className="mt-4 block text-sm text-[#5a4b3f]">
           Visível para
           <select
-            value={form.circle_visibility}
+            value={visibilityValue}
             onChange={(event) => setForm((current) => ({ ...current, circle_visibility: event.target.value }))}
             className="mt-1 w-full rounded-2xl border border-[#eddcc7] bg-[#fffaf4] px-3 py-2.5 outline-none transition focus:border-[#d4a86d]"
           >
-            <option value="intimos">íntimos</option>
-            <option value="amigos">amigos</option>
-            <option value="conhecidos">conhecidos</option>
+            {circles.map((circle) => (
+              <option key={circle.id} value={circle.id}>
+                {circle.label}
+              </option>
+            ))}
           </select>
         </label>
 
