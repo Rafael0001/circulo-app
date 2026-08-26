@@ -51,7 +51,13 @@ export default function Home() {
         ))}
       </div>
 
-      <CirculoViz friends={friends} pulsos={pulsos} onMoveFriend={moveFriend} onCreatePulso={criarPulso} />
+      <CirculoViz
+        friends={friends}
+        pulsos={pulsos}
+        selectedCircle={selectedCircle}
+        onMoveFriend={moveFriend}
+        onCreatePulso={criarPulso}
+      />
 
       <section className="mt-6">
         <div className="mb-3 flex items-center justify-between">
@@ -60,9 +66,13 @@ export default function Home() {
         </div>
 
         <div className="space-y-3">
-          {visiblePulsos.map((pulso) => (
-            <PulsoCard key={pulso.id} pulso={pulso} />
-          ))}
+          {visiblePulsos.length === 0 ? (
+            <p className="rounded-[24px] border border-dashed border-[#eadfce] bg-white/70 px-4 py-6 text-center text-sm text-[#8d7c6b]">
+              Nenhum pulso neste círculo.
+            </p>
+          ) : (
+            visiblePulsos.map((pulso) => <PulsoCard key={pulso.id} pulso={pulso} />)
+          )}
         </div>
       </section>
 
