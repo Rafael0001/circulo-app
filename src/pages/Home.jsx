@@ -5,7 +5,16 @@ import { useFriends } from '../hooks/useFriends'
 import { usePulsos } from '../hooks/usePulsos'
 
 export default function Home() {
-  const { friends, circles, maxCircles, moveFriend, addCircle, renameCircle } = useFriends()
+  const {
+    friends,
+    circles,
+    maxCircles,
+    moveFriend,
+    removeFriendFromCircle,
+    addCircle,
+    renameCircle,
+    removeCircle,
+  } = useFriends()
   const { pulsos, criarPulso } = usePulsos()
 
   return (
@@ -26,8 +35,10 @@ export default function Home() {
         maxCircles={maxCircles}
         pulsos={pulsos}
         onMoveFriend={moveFriend}
+        onRemoveFromCircle={removeFriendFromCircle}
         onAddCircle={addCircle}
         onRenameCircle={renameCircle}
+        onRemoveCircle={removeCircle}
         onCreatePulso={criarPulso}
       />
 

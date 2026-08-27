@@ -88,6 +88,14 @@ export function FriendsProvider({ children }) {
     )
   }, [])
 
+  const removeFriendFromCircle = useCallback((friendId) => {
+    setFriends((current) =>
+      current.map((friend) =>
+        friend.id === friendId ? { ...friend, circle: 'conhecidos' } : friend,
+      ),
+    )
+  }, [])
+
   const addFriend = useCallback(
     (person) => {
       const nextFriend = {
@@ -134,18 +142,45 @@ export function FriendsProvider({ children }) {
     )
   }, [])
 
+  const removeCircle = useCallback((circleId) => {
+    if (!circleId || BASE_CIRCLES.some((circle) => circle.id === circleId)) {
+      return
+    }
+
+    setCircles((current) => {
+      if (!current.some((circle) => circle.id === circleId)) {
+        return current
+      }
+
+      const remaining = current.filter((circle) => circle.id !== circleId)
+      const removedIndex = current.findIndex((circle) => circle.id === circleId)
+      const targetIndex = Math.min(removedIndex, remaining.length - 1)
+      const nextCircle = remaining[targetIndex]?.id ?? 'conhecidos'
+
+      setFriends((friendList) =>
+        friendList.map((friend) =>
+          friend.circle === circleId ? { ...friend, circle: nextCircle } : friend,
+        ),
+      )
+
+      return remaining
+    })
+  }, [])
+
   const value = useMemo(
     () => ({
       friends,
       circles,
       maxCircles: MAX_CIRCLES,
       moveFriend,
+      removeFriendFromCircle,
       addFriend,
       addCircle,
       renameCircle,
+      removeCircle,
       circleOptions,
     }),
-    [friends, circles, moveFriend, addFriend, addCircle, renameCircle, circleOptions],
+    [friends, circles, moveFriend, removeFriendFromCircle, addFriend, addCircle, renameCircle, removeCircle, circleOptions],
   )
 
   return <FriendsContext.Provider value={value}>{children}</FriendsContext.Provider>

@@ -50,8 +50,10 @@ export default function CirculoViz({
   maxCircles = 5,
   pulsos,
   onMoveFriend,
+  onRemoveFromCircle,
   onAddCircle,
   onRenameCircle,
+  onRemoveCircle,
   onCreatePulso,
 }) {
   const rings = useMemo(() => ringsFromCircles(circles), [circles])
@@ -70,6 +72,7 @@ export default function CirculoViz({
   const [zoom, setZoom] = useState(1)
   const [editingId, setEditingId] = useState(null)
   const [editingLabel, setEditingLabel] = useState('')
+  const [confirmDeleteId, setConfirmDeleteId] = useState(null)
   const dragStartRef = useRef({ y: 0, lift: 0 })
   const isDraggingRef = useRef(false)
   const dragHandleRef = useRef(null)
@@ -113,9 +116,15 @@ export default function CirculoViz({
   }, [friends, selected, selectedRing])
 
   const atCircleLimit = circles.length >= maxCircles
+  const customCircles = useMemo(
+    () => circles.filter((circle) => !['intimos', 'amigos', 'conhecidos'].includes(circle.id)),
+    [circles],
+  )
+  const outermostCustomCircle = customCircles[customCircles.length - 1] ?? null
   const visibilityValue = rings.some((ring) => ring.id === pulsoVisibility)
     ? pulsoVisibility
     : defaultVisibility
+  const deleteCandidate = rings.find((ring) => ring.id === confirmDeleteId) ?? null
 
   const closeModal = () => {
     setShowModal(false)
@@ -128,6 +137,24 @@ export default function CirculoViz({
   const closeFriendPopover = () => {
     setSelectedId(null)
     setPopoverLift(0)
+  }
+
+  const handleDeleteCircle = (circleId) => {
+    if (typeof onRemoveCircle !== 'function') {
+      setConfirmDeleteId(null)
+      return
+    }
+
+    onRemoveCircle(circleId)
+    setConfirmDeleteId(null)
+  }
+
+  const handleRemoveOutermostCustomCircle = () => {
+    if (!outermostCustomCircle || typeof onRemoveCircle !== 'function') {
+      return
+    }
+
+    onRemoveCircle(outermostCustomCircle.id)
   }
 
   const commitRename = () => {
@@ -233,6 +260,16 @@ export default function CirculoViz({
           </button>
           <button
             type="button"
+            onClick={handleRemoveOutermostCustomCircle}
+            disabled={!outermostCustomCircle}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-[#eadfce] bg-white text-[#6f5a4a] disabled:opacity-40"
+            aria-label="Remover o círculo externo mais recente"
+            title="Remover o círculo externo mais recente"
+          >
+            <span className="text-base leading-none">−</span>
+          </button>
+          <button
+            type="button"
             onClick={() => setZoom((current) => Math.min(MAX_ZOOM, +(current + ZOOM_STEP).toFixed(2)))}
             disabled={zoom >= MAX_ZOOM}
             className="flex h-7 w-7 items-center justify-center rounded-full border border-[#eadfce] bg-white text-[#6f5a4a] disabled:opacity-40"
@@ -311,6 +348,13 @@ export default function CirculoViz({
                     fill={ring.color}
                     className="cursor-pointer font-semibold uppercase"
                     onClick={(event) => {
+                      event.stopPropagation()
+                      if (['intimos', 'amigos', 'conhecidos'].includes(ring.id)) {
+                        return
+                      }
+                      setConfirmDeleteId(ring.id)
+                    }}
+                    onDoubleClick={(event) => {
                       event.stopPropagation()
                       startRename(ring)
                     }}
@@ -595,6 +639,33 @@ export default function CirculoViz({
         )}
       </div>
 
+      {deleteCandidate && (
+        <div
+          className="absolute left-1/2 z-30 w-[220px] -translate-x-1/2 rounded-[18px] border border-[#f1e3d6] bg-white p-3 shadow-[0_18px_30px_rgba(60,45,35,0.12)]"
+          style={{
+            top: `${Math.max(8, ((300 - deleteCandidate.radius + 25) / 600) * 100)}%`,
+          }}
+        >
+          <p className="mb-2 text-center text-[12px] font-medium text-[#3d312b]">Excluir este círculo?</p>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={() => setConfirmDeleteId(null)}
+              className="flex-1 rounded-full border border-[#eadfce] bg-[#fffaf5] px-2 py-1.5 text-[11px] font-medium text-[#6b5447]"
+            >
+              Cancelar
+            </button>
+            <button
+              type="button"
+              onClick={() => handleDeleteCircle(deleteCandidate.id)}
+              className="flex-1 rounded-full bg-[#352d29] px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#f5d89a]"
+            >
+              Excluir
+            </button>
+          </div>
+        </div>
+      )}
+
       {selected && onMoveFriend && (
         <div className="mt-4 rounded-[20px] border border-[#f0e2d7] bg-[#fffaf4] p-3">
           <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8b7870]">mover {selected.name}</p>
@@ -614,6 +685,15 @@ export default function CirculoViz({
               </button>
             ))}
           </div>
+          {typeof onRemoveFromCircle === 'function' && (
+            <button
+              type="button"
+              onClick={() => onRemoveFromCircle(selected.id)}
+              className="mt-3 w-full rounded-full border border-[#e8d7c4] bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6a5243]"
+            >
+              Remover do círculo
+            </button>
+          )}
         </div>
       )}
     </div>
