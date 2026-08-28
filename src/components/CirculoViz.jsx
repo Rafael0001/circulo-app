@@ -85,7 +85,7 @@ export default function CirculoViz({
   const dragHandleRef = useRef(null)
 
   const [friendCardPosition, setFriendCardPosition] = useState({ x: 140, y: 140 })
-  const { selectedFriend, showSheet, selectFriend, openSheet, closeAll, moveSelectedFriend, removeSelectedFriend } = useFriendCard({
+  const { selectedFriend, showSheet, selectFriend, saveFriendNote, openSheet, closeAll, moveSelectedFriend, removeSelectedFriend } = useFriendCard({
     moveFriend: onMoveFriend,
     removeFriendFromCircle: onRemoveFromCircle,
   })
@@ -702,6 +702,7 @@ export default function CirculoViz({
             openSheet()
           }}
           onMove={(friendId, nextCircle) => moveSelectedFriend(friendId, nextCircle)}
+          onSaveNote={saveFriendNote}
         />
       )}
 
