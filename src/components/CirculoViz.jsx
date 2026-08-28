@@ -1,5 +1,8 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Minus, Plus } from 'lucide-react'
+import FriendCard from './FriendCard'
+import FriendSheet from './FriendSheet'
+import { useFriendCard } from '../hooks/useFriendCard'
 
 const categoryOptions = {
   necessidade: { icon: '🤝', label: 'necessidade', accent: '#F4956A', hint: 'ex: preciso de carona hoje' },
@@ -72,12 +75,19 @@ export default function CirculoViz({
   const [zoom, setZoom] = useState(1)
   const [editingId, setEditingId] = useState(null)
   const [editingLabel, setEditingLabel] = useState('')
+  const [editingOriginalLabel, setEditingOriginalLabel] = useState('')
   const [menuOpen, setMenuOpen] = useState(false)
   const [deleteMenuOpen, setDeleteMenuOpen] = useState(false)
   const menuRef = useRef(null)
   const dragStartRef = useRef({ y: 0, lift: 0 })
   const isDraggingRef = useRef(false)
   const dragHandleRef = useRef(null)
+
+  const [friendCardPosition, setFriendCardPosition] = useState({ x: 140, y: 140 })
+  const { selectedFriend, showSheet, selectFriend, openSheet, closeAll, moveSelectedFriend, removeSelectedFriend } = useFriendCard({
+    moveFriend: onMoveFriend,
+    removeFriendFromCircle: onRemoveFromCircle,
+  })
 
   const selected = useMemo(
     () => friends.find((friend) => friend.id === selectedId) ?? null,
@@ -155,6 +165,15 @@ export default function CirculoViz({
     setPopoverLift(0)
   }
 
+  const handleAvatarClick = (event, friend) => {
+    setSelectedId(friend.id)
+    selectFriend(friend)
+
+    const nextX = Math.min(Math.max(event.clientX, 100), window.innerWidth - 300)
+    const nextY = Math.min(Math.max(event.clientY, 120), window.innerHeight - 300)
+    setFriendCardPosition({ x: nextX, y: nextY })
+  }
+
   const handleDeleteCircle = (circleId) => {
     if (typeof onRemoveCircle !== 'function') {
       setMenuOpen(false)
@@ -168,13 +187,41 @@ export default function CirculoViz({
   }
 
   const commitRename = () => {
-    if (!editingId || typeof onRenameCircle !== 'function') {
+    if (!editingId) {
       setEditingId(null)
+      setEditingLabel('')
+      setEditingOriginalLabel('')
       return
     }
 
-    onRenameCircle(editingId, editingLabel)
+    if (['intimos', 'amigos', 'conhecidos'].includes(editingId)) {
+      setEditingId(null)
+      setEditingLabel('')
+      setEditingOriginalLabel('')
+      return
+    }
+
+    const nextLabel = editingLabel.trim()
+    const fallbackLabel = editingOriginalLabel || ''
+
+    if (!nextLabel) {
+      setEditingId(null)
+      setEditingLabel(fallbackLabel)
+      setEditingOriginalLabel('')
+      return
+    }
+
+    if (typeof onRenameCircle !== 'function') {
+      setEditingId(null)
+      setEditingLabel(fallbackLabel)
+      setEditingOriginalLabel('')
+      return
+    }
+
+    onRenameCircle(editingId, nextLabel)
     setEditingId(null)
+    setEditingLabel('')
+    setEditingOriginalLabel('')
   }
 
   const handlePointerDown = (event) => {
@@ -317,6 +364,16 @@ export default function CirculoViz({
       ) : null}
 
       <div className="relative overflow-hidden rounded-[24px]">
+        {selectedFriend && (
+          <div
+            className="fixed inset-0 z-20 bg-transparent"
+            onClick={() => {
+              closeAll()
+              setSelectedId(null)
+            }}
+          />
+        )}
+
         <div
           className="origin-center transition-transform duration-200"
           style={{ transform: `scale(${zoom})` }}
@@ -357,10 +414,13 @@ export default function CirculoViz({
                           commitRename()
                         }
                         if (event.key === 'Escape') {
+                          event.preventDefault()
                           setEditingId(null)
+                          setEditingLabel(editingOriginalLabel)
+                          setEditingOriginalLabel('')
                         }
                       }}
-                      className="w-full rounded-full border border-[#eadfce] bg-white px-2 py-0.5 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5c4733] outline-none"
+                      className="w-full rounded-full border border-[#eadfce] bg-white/60 px-2 py-0.5 text-center text-[11px] font-semibold uppercase tracking-[0.14em] text-[#5c4733] outline-none ring-0"
                     />
                   </foreignObject>
                 ) : (
@@ -378,6 +438,7 @@ export default function CirculoViz({
                         return
                       }
                       setEditingId(ring.id)
+                      setEditingOriginalLabel(ring.label)
                       setEditingLabel(ring.label)
                     }}
                   >
@@ -403,7 +464,16 @@ export default function CirculoViz({
                     key={friend.id}
                     transform={`translate(${300 + pos.x}, ${300 + pos.y})`}
                     className="cursor-pointer"
-                    onClick={() => setSelectedId(isSelected ? null : friend.id)}
+                    data-friend-avatar={friend.id}
+                    onClick={(event) => {
+                      if (isSelected) {
+                        setSelectedId(null)
+                        closeAll()
+                        return
+                      }
+
+                      handleAvatarClick(event, friend)
+                    }}
                   >
                     {hasPulse && (
                       <>
@@ -683,6 +753,45 @@ export default function CirculoViz({
           </div>
         )}
       </div>
+
+      {selectedFriend && (
+        <FriendCard
+          friend={selectedFriend}
+          circles={rings}
+          pulsos={pulseMap[selectedFriend.name] ?? []}
+          position={friendCardPosition}
+          onClose={() => {
+            closeAll()
+            setSelectedId(null)
+          }}
+          onOpenSheet={() => {
+            openSheet()
+          }}
+          onMove={(friendId, nextCircle) => moveSelectedFriend(friendId, nextCircle)}
+        />
+      )}
+
+      {showSheet && selectedFriend && (
+        <FriendSheet
+          friend={selectedFriend}
+          circles={rings}
+          pulsos={pulseMap[selectedFriend.name] ?? []}
+          onClose={() => {
+            closeAll()
+            setSelectedId(null)
+          }}
+          onMove={(friendId, nextCircle) => {
+            moveSelectedFriend(friendId, nextCircle)
+            closeAll()
+            setSelectedId(null)
+          }}
+          onRemoveFromCircle={(friendId) => {
+            removeSelectedFriend(friendId)
+            closeAll()
+            setSelectedId(null)
+          }}
+        />
+      )}
 
       {selected && onMoveFriend && (
         <div className="mt-4 rounded-[20px] border border-[#f0e2d7] bg-[#fffaf4] p-3">

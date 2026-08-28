@@ -138,9 +138,24 @@ export function PulsosProvider({ children }) {
 
   const createPulso = useCallback(async (newPulso) => criarPulso(newPulso), [criarPulso])
 
+  const getFriendPulsos = useCallback(
+    (friendOrName) => {
+      const friendName = typeof friendOrName === 'string' ? friendOrName : friendOrName?.name
+
+      if (!friendName) {
+        return []
+      }
+
+      return [...pulsos]
+        .filter((pulso) => pulso.author === friendName)
+        .sort((a, b) => new Date(b.created_at) - new Date(a.created_at))
+    },
+    [pulsos],
+  )
+
   const value = useMemo(
-    () => ({ pulsos, createPulso, criarPulso }),
-    [pulsos, createPulso, criarPulso],
+    () => ({ pulsos, createPulso, criarPulso, getFriendPulsos }),
+    [pulsos, createPulso, criarPulso, getFriendPulsos],
   )
 
   return <PulsosContext.Provider value={value}>{children}</PulsosContext.Provider>
