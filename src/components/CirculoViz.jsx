@@ -79,6 +79,7 @@ export default function CirculoViz({
   const [menuOpen, setMenuOpen] = useState(false)
   const [deleteMenuOpen, setDeleteMenuOpen] = useState(false)
   const menuRef = useRef(null)
+  const svgContainerRef = useRef(null)
   const dragStartRef = useRef({ y: 0, lift: 0 })
   const isDraggingRef = useRef(false)
   const dragHandleRef = useRef(null)
@@ -169,9 +170,16 @@ export default function CirculoViz({
     setSelectedId(friend.id)
     selectFriend(friend)
 
-    const nextX = Math.min(Math.max(event.clientX, 100), window.innerWidth - 300)
-    const nextY = Math.min(Math.max(event.clientY, 120), window.innerHeight - 300)
-    setFriendCardPosition({ x: nextX, y: nextY })
+    if (!svgContainerRef.current) {
+      return
+    }
+
+    const avatarRect = event.currentTarget.getBoundingClientRect()
+    const containerRect = svgContainerRef.current.getBoundingClientRect()
+    const x = avatarRect.left - containerRect.left + avatarRect.width / 2
+    const y = avatarRect.top - containerRect.top + avatarRect.height / 2
+
+    setFriendCardPosition({ x, y })
   }
 
   const handleDeleteCircle = (circleId) => {
@@ -363,7 +371,7 @@ export default function CirculoViz({
         <p className="mb-2 px-1 text-[10px] uppercase tracking-[0.14em] text-[#a37d5a]">máximo de 5 círculos</p>
       ) : null}
 
-      <div className="relative overflow-hidden rounded-[24px]">
+      <div ref={svgContainerRef} className="relative overflow-hidden rounded-[24px]">
         {selectedFriend && (
           <div
             className="fixed inset-0 z-20 bg-transparent"
@@ -577,80 +585,6 @@ export default function CirculoViz({
           </button>
         </div>
 
-        {selectedPulsos.length > 0 && selectedCoordinates && (
-          <div className="absolute inset-0 z-20" onClick={closeFriendPopover}>
-            <div
-              className="absolute w-[240px] rounded-[18px] border border-[#f0e6d8] bg-white p-3 shadow-[0_18px_30px_rgba(60,45,35,0.12)]"
-              onClick={(event) => event.stopPropagation()}
-              style={{
-                left: `${Math.min(Math.max(selectedCoordinates.x * 100, 18), 82)}%`,
-                top: `${Math.min(Math.max(selectedCoordinates.y * 100, 22), 78)}%`,
-                transform: 'translate(-50%, 0)',
-              }}
-            >
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[#8d7b67]">{selected.name}</span>
-                <div className="flex items-center gap-2">
-                  <span className="rounded-full bg-[#f4ead9] px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em] text-[#7f6042]">
-                    {selectedPulsos.length} pulsos
-                  </span>
-                  <button
-                    type="button"
-                    onClick={closeFriendPopover}
-                    className="flex h-6 w-6 items-center justify-center rounded-full bg-[#f5efe8] text-sm text-[#5f4f47]"
-                    aria-label="Fechar pulsos"
-                  >
-                    ×
-                  </button>
-                </div>
-              </div>
-
-              <div className="relative flex max-h-[220px] overflow-hidden">
-                <div
-                  className="flex-1 space-y-2"
-                  style={{
-                    transform: `translateY(-${popoverLift}px)`,
-                    transition: isDragging ? 'none' : 'transform 0.2s ease',
-                  }}
-                >
-                  {selectedPulsos.map((pulso) => (
-                    <div key={pulso.id} className="rounded-[12px] border border-[#f5eee8] bg-[#fffaf4] p-2.5">
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <span
-                          className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em]"
-                          style={{
-                            background: `${categoryOptions[pulso.category]?.accent ?? '#F4956A'}22`,
-                            color: categoryOptions[pulso.category]?.accent ?? '#F4956A',
-                          }}
-                        >
-                          <span>{categoryOptions[pulso.category]?.icon ?? '✦'}</span>
-                          {pulso.category}
-                        </span>
-                        <span className="text-[8px] uppercase tracking-[0.1em] text-[#8a7a69]">
-                          {formatPulsoTimestamp(pulso.created_at)}
-                        </span>
-                      </div>
-                      <p className="text-[12px] leading-5 text-[#362f2b]">{pulso.content}</p>
-                    </div>
-                  ))}
-                </div>
-
-                <div
-                  ref={dragHandleRef}
-                  className="ml-2 flex w-3 cursor-grab touch-none items-center justify-center rounded-full bg-[#f4efe9]"
-                  onPointerDown={handlePointerDown}
-                  onPointerMove={handlePointerMove}
-                  onPointerUp={handlePointerEnd}
-                  onPointerLeave={handlePointerEnd}
-                  onPointerCancel={handlePointerEnd}
-                >
-                  <div className="h-12 w-1 rounded-full bg-[#d9c8b6]" />
-                </div>
-              </div>
-            </div>
-          </div>
-        )}
-
         {showModal && (
           <div
             className="absolute inset-0 z-10 flex items-center justify-center rounded-[24px] bg-[#1a1715]/55 px-4 py-10"
@@ -793,36 +727,6 @@ export default function CirculoViz({
         />
       )}
 
-      {selected && onMoveFriend && (
-        <div className="mt-4 rounded-[20px] border border-[#f0e2d7] bg-[#fffaf4] p-3">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8b7870]">mover {selected.name}</p>
-          <div className="flex flex-wrap gap-2">
-            {rings.map((ring) => (
-              <button
-                key={ring.id}
-                type="button"
-                onClick={() => onMoveFriend(selected.id, ring.id)}
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
-                  selected.circle === ring.id
-                    ? 'border-transparent bg-[#ead3a9] text-[#5c4733]'
-                    : 'border-[#e7d8ca] bg-white text-[#6f5a4a]'
-                }`}
-              >
-                {ring.label}
-              </button>
-            ))}
-          </div>
-          {typeof onRemoveFromCircle === 'function' && (
-            <button
-              type="button"
-              onClick={() => onRemoveFromCircle(selected.id)}
-              className="mt-3 w-full rounded-full border border-[#e8d7c4] bg-white px-3 py-2 text-[11px] font-semibold uppercase tracking-[0.14em] text-[#6a5243]"
-            >
-              Remover do círculo
-            </button>
-          )}
-        </div>
-      )}
     </div>
   )
 }

@@ -27,14 +27,17 @@ export default function FriendCard({
 
   const currentCircle = circles.find((circle) => circle.id === friend.circle)
   const moveOptions = circles.filter((circle) => circle.id !== friend.circle)
+  const cardWidth = 270
+  const isOnRight = position.x > 180
+  const left = isOnRight ? Math.max(12, position.x - cardWidth - 18) : Math.min(Math.max(12, position.x + 18), 420 - cardWidth)
+  const top = Math.max(12, position.y - 70)
 
   return (
     <div
-      className="fixed z-30 w-[270px] rounded-[22px] border border-[#f0e6d8] bg-white p-3 shadow-[0_20px_40px_rgba(58,41,29,0.12)] opacity-100 transition-all duration-200 ease-out"
+      className="absolute z-30 w-[270px] rounded-[22px] border border-[#f0e6d8] bg-white p-3 shadow-[0_20px_40px_rgba(58,41,29,0.12)] opacity-100 transition-all duration-200 ease-out"
       style={{
-        left: `${position.x}px`,
-        top: `${position.y}px`,
-        transform: 'translate(-12px, -12px)',
+        left: `${left}px`,
+        top: `${top}px`,
       }}
     >
       <div className="flex items-start justify-between gap-2">
