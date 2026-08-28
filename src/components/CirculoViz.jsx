@@ -72,7 +72,9 @@ export default function CirculoViz({
   const [zoom, setZoom] = useState(1)
   const [editingId, setEditingId] = useState(null)
   const [editingLabel, setEditingLabel] = useState('')
-  const [confirmDeleteId, setConfirmDeleteId] = useState(null)
+  const [menuOpen, setMenuOpen] = useState(false)
+  const [deleteMenuOpen, setDeleteMenuOpen] = useState(false)
+  const menuRef = useRef(null)
   const dragStartRef = useRef({ y: 0, lift: 0 })
   const isDraggingRef = useRef(false)
   const dragHandleRef = useRef(null)
@@ -120,11 +122,25 @@ export default function CirculoViz({
     () => circles.filter((circle) => !['intimos', 'amigos', 'conhecidos'].includes(circle.id)),
     [circles],
   )
-  const outermostCustomCircle = customCircles[customCircles.length - 1] ?? null
   const visibilityValue = rings.some((ring) => ring.id === pulsoVisibility)
     ? pulsoVisibility
     : defaultVisibility
-  const deleteCandidate = rings.find((ring) => ring.id === confirmDeleteId) ?? null
+
+  useEffect(() => {
+    if (!menuOpen && !deleteMenuOpen) {
+      return undefined
+    }
+
+    const handleClickOutside = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMenuOpen(false)
+        setDeleteMenuOpen(false)
+      }
+    }
+
+    document.addEventListener('mousedown', handleClickOutside)
+    return () => document.removeEventListener('mousedown', handleClickOutside)
+  }, [menuOpen, deleteMenuOpen])
 
   const closeModal = () => {
     setShowModal(false)
@@ -141,20 +157,14 @@ export default function CirculoViz({
 
   const handleDeleteCircle = (circleId) => {
     if (typeof onRemoveCircle !== 'function') {
-      setConfirmDeleteId(null)
+      setMenuOpen(false)
+      setDeleteMenuOpen(false)
       return
     }
 
     onRemoveCircle(circleId)
-    setConfirmDeleteId(null)
-  }
-
-  const handleRemoveOutermostCustomCircle = () => {
-    if (!outermostCustomCircle || typeof onRemoveCircle !== 'function') {
-      return
-    }
-
-    onRemoveCircle(outermostCustomCircle.id)
+    setMenuOpen(false)
+    setDeleteMenuOpen(false)
   }
 
   const commitRename = () => {
@@ -165,11 +175,6 @@ export default function CirculoViz({
 
     onRenameCircle(editingId, editingLabel)
     setEditingId(null)
-  }
-
-  const startRename = (ring) => {
-    setEditingId(ring.id)
-    setEditingLabel(ring.label)
   }
 
   const handlePointerDown = (event) => {
@@ -248,43 +253,63 @@ export default function CirculoViz({
     <div className="w-full max-w-md rounded-[30px] border border-[#f0e5d9] bg-[#fffdfb]/80 p-3 shadow-[0_14px_36px_rgba(166,139,107,0.08)] backdrop-blur-sm">
       <div className="mb-2 flex items-center justify-between gap-2 px-1">
         <p className="text-[10px] font-semibold uppercase tracking-[0.38em] text-[#9a8e80]">círculo</p>
-        <div className="flex items-center gap-1">
+        <div ref={menuRef} className="relative">
           <button
             type="button"
-            onClick={() => setZoom((current) => Math.max(MIN_ZOOM, +(current - ZOOM_STEP).toFixed(2)))}
-            disabled={zoom <= MIN_ZOOM}
-            className="flex h-7 w-7 items-center justify-center rounded-full border border-[#eadfce] bg-white text-[#6f5a4a] disabled:opacity-40"
-            aria-label="Diminuir zoom"
+            onClick={() => setMenuOpen((current) => !current)}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-[#eadfce] bg-white text-xl text-[#6f5a4a] shadow-[0_8px_18px_rgba(82,64,52,0.08)]"
+            aria-label="Abrir menu do círculo"
+            title="Menu do círculo"
           >
-            <Minus size={14} />
+            ☰
           </button>
-          <button
-            type="button"
-            onClick={handleRemoveOutermostCustomCircle}
-            disabled={!outermostCustomCircle}
-            className="flex h-7 w-7 items-center justify-center rounded-full border border-[#eadfce] bg-white text-[#6f5a4a] disabled:opacity-40"
-            aria-label="Remover o círculo externo mais recente"
-            title="Remover o círculo externo mais recente"
-          >
-            <span className="text-base leading-none">−</span>
-          </button>
-          <button
-            type="button"
-            onClick={() => setZoom((current) => Math.min(MAX_ZOOM, +(current + ZOOM_STEP).toFixed(2)))}
-            disabled={zoom >= MAX_ZOOM}
-            className="flex h-7 w-7 items-center justify-center rounded-full border border-[#eadfce] bg-white text-[#6f5a4a] disabled:opacity-40"
-            aria-label="Aumentar zoom"
-          >
-            <Plus size={14} />
-          </button>
-          <button
-            type="button"
-            onClick={() => onAddCircle?.()}
-            disabled={atCircleLimit}
-            className="rounded-full border border-[#eadfce] bg-[#fffaf4] px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-[#7f5b3d] disabled:cursor-not-allowed disabled:opacity-40"
-          >
-            + círculo
-          </button>
+
+          {menuOpen && (
+            <div className="absolute right-0 top-[calc(100%+8px)] z-40 w-[210px] rounded-[18px] border border-[#f0e6d8] bg-white p-2 shadow-[0_18px_38px_rgba(60,45,35,0.12)]">
+              <button
+                type="button"
+                onClick={() => {
+                  onAddCircle?.()
+                  setMenuOpen(false)
+                }}
+                disabled={atCircleLimit}
+                className="flex w-full items-center justify-between rounded-[12px] px-3 py-3 text-left text-[13px] font-medium text-[#362f2b] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <span>Adicionar círculo</span>
+                <span className="text-lg text-[#8b735d]">＋</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setDeleteMenuOpen((current) => !current)
+                }}
+                disabled={customCircles.length === 0}
+                className="mt-1 flex w-full items-center justify-between rounded-[12px] px-3 py-3 text-left text-[13px] font-medium text-[#362f2b] disabled:cursor-not-allowed disabled:opacity-45"
+              >
+                <span>Excluir círculo</span>
+                <span className="text-lg text-[#8b735d]">−</span>
+              </button>
+
+              {deleteMenuOpen && customCircles.length > 0 && (
+                <div className="mt-2 rounded-[14px] border border-[#f0e6d8] bg-[#fffaf4] p-2">
+                  <p className="mb-2 px-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8d7b67]">Selecionar</p>
+                  <div className="space-y-1">
+                    {customCircles.map((circle) => (
+                      <button
+                        key={circle.id}
+                        type="button"
+                        onClick={() => handleDeleteCircle(circle.id)}
+                        className="flex w-full items-center justify-between rounded-[10px] border border-transparent bg-white px-2 py-2 text-left text-[12px] text-[#4b413c]"
+                      >
+                        <span>{circle.label}</span>
+                        <span className="text-[#a37d5a]">Excluir</span>
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
         </div>
       </div>
       {atCircleLimit ? (
@@ -352,11 +377,8 @@ export default function CirculoViz({
                       if (['intimos', 'amigos', 'conhecidos'].includes(ring.id)) {
                         return
                       }
-                      setConfirmDeleteId(ring.id)
-                    }}
-                    onDoubleClick={(event) => {
-                      event.stopPropagation()
-                      startRename(ring)
+                      setEditingId(ring.id)
+                      setEditingLabel(ring.label)
                     }}
                   >
                     {ring.label}
@@ -460,6 +482,29 @@ export default function CirculoViz({
               </text>
             </g>
           </svg>
+        </div>
+
+        <div className="absolute bottom-3 right-3 z-20 flex flex-col gap-2">
+          <button
+            type="button"
+            onClick={() => setZoom((current) => Math.min(2, Number((current + ZOOM_STEP).toFixed(2))))}
+            disabled={zoom >= 2}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-[#eadfce] bg-white/90 text-2xl text-[#6f5a4a] shadow-[0_10px_20px_rgba(83,63,46,0.12)] backdrop-blur-sm disabled:opacity-50"
+            aria-label="Aumentar zoom"
+            title="Aumentar zoom"
+          >
+            <Plus size={18} />
+          </button>
+          <button
+            type="button"
+            onClick={() => setZoom((current) => Math.max(0.5, Number((current - ZOOM_STEP).toFixed(2))))}
+            disabled={zoom <= 0.5}
+            className="flex h-11 w-11 items-center justify-center rounded-full border border-[#eadfce] bg-white/90 text-2xl text-[#6f5a4a] shadow-[0_10px_20px_rgba(83,63,46,0.12)] backdrop-blur-sm disabled:opacity-50"
+            aria-label="Diminuir zoom"
+            title="Diminuir zoom"
+          >
+            <Minus size={18} />
+          </button>
         </div>
 
         {selectedPulsos.length > 0 && selectedCoordinates && (
@@ -638,33 +683,6 @@ export default function CirculoViz({
           </div>
         )}
       </div>
-
-      {deleteCandidate && (
-        <div
-          className="absolute left-1/2 z-30 w-[220px] -translate-x-1/2 rounded-[18px] border border-[#f1e3d6] bg-white p-3 shadow-[0_18px_30px_rgba(60,45,35,0.12)]"
-          style={{
-            top: `${Math.max(8, ((300 - deleteCandidate.radius + 25) / 600) * 100)}%`,
-          }}
-        >
-          <p className="mb-2 text-center text-[12px] font-medium text-[#3d312b]">Excluir este círculo?</p>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => setConfirmDeleteId(null)}
-              className="flex-1 rounded-full border border-[#eadfce] bg-[#fffaf5] px-2 py-1.5 text-[11px] font-medium text-[#6b5447]"
-            >
-              Cancelar
-            </button>
-            <button
-              type="button"
-              onClick={() => handleDeleteCircle(deleteCandidate.id)}
-              className="flex-1 rounded-full bg-[#352d29] px-2 py-1.5 text-[11px] font-semibold uppercase tracking-[0.12em] text-[#f5d89a]"
-            >
-              Excluir
-            </button>
-          </div>
-        </div>
-      )}
 
       {selected && onMoveFriend && (
         <div className="mt-4 rounded-[20px] border border-[#f0e2d7] bg-[#fffaf4] p-3">
