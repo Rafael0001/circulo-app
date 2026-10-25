@@ -1,14 +1,23 @@
+import { AlertTriangle, Zap } from 'lucide-react'
 import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import NavBar from '../components/NavBar'
 import { useFriends } from '../hooks/useFriends'
 import { usePulsos } from '../hooks/usePulsos'
 
-const categoryOptions = [
-  { value: 'necessidade', label: 'necessidade' },
-  { value: 'vontade', label: 'vontade' },
-  { value: 'sonho', label: 'sonho' },
-  { value: 'projeto', label: 'projeto' },
+const priorityFlags = [
+  {
+    key: 'is_importante',
+    label: 'Importante',
+    color: '#E8C87A',
+    icon: AlertTriangle,
+  },
+  {
+    key: 'is_urgente',
+    label: 'Urgente',
+    color: '#F4956A',
+    icon: Zap,
+  },
 ]
 
 export default function CriarPulso() {
@@ -17,7 +26,8 @@ export default function CriarPulso() {
   const { circles } = useFriends()
   const defaultVisibility = circles[circles.length - 1]?.id ?? ''
   const [form, setForm] = useState({
-    category: 'necessidade',
+    is_importante: false,
+    is_urgente: false,
     content: '',
     circle_visibility: defaultVisibility,
   })
@@ -26,12 +36,20 @@ export default function CriarPulso() {
     [circles, defaultVisibility, form.circle_visibility],
   )
 
+  const toggleFlag = (flagKey) => {
+    setForm((current) => ({
+      ...current,
+      [flagKey]: !current[flagKey],
+    }))
+  }
+
   const handleSubmit = async (event) => {
     event.preventDefault()
     if (!form.content.trim()) return
 
     await createPulso({
-      category: form.category,
+      is_importante: form.is_importante,
+      is_urgente: form.is_urgente,
       content: form.content.trim(),
       circle_visibility: visibilityValue,
     })
@@ -47,20 +65,33 @@ export default function CriarPulso() {
       </header>
 
       <form onSubmit={handleSubmit} className="rounded-[30px] border border-[#f0e6d8] bg-white/85 p-5 shadow-[0_14px_36px_rgba(166,139,107,0.08)]">
-        <label className="block text-sm text-[#5a4b3f]">
-          Categoria
-          <select
-            value={form.category}
-            onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
-            className="mt-1 w-full rounded-2xl border border-[#eddcc7] bg-[#fffaf4] px-3 py-2.5 outline-none transition focus:border-[#d4a86d]"
-          >
-            {categoryOptions.map((category) => (
-              <option key={category.value} value={category.value}>
-                {category.label}
-              </option>
-            ))}
-          </select>
-        </label>
+        <div className="grid grid-cols-2 gap-3">
+          {priorityFlags.map((flag) => {
+            const Icon = flag.icon
+            const isActive = form[flag.key]
+
+            return (
+              <button
+                key={flag.key}
+                type="button"
+                onClick={() => toggleFlag(flag.key)}
+                className="flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-medium transition"
+                style={{
+                  borderColor: isActive ? flag.color : '#eddcc7',
+                  background: isActive ? `${flag.color}1A` : '#fffaf4',
+                  color: isActive ? flag.color : '#6d5748',
+                }}
+              >
+                <Icon
+                  className="h-4 w-4"
+                  fill={isActive ? 'currentColor' : 'none'}
+                  strokeWidth={1.8}
+                />
+                {flag.label}
+              </button>
+            )
+          })}
+        </div>
 
         <label className="mt-4 block text-sm text-[#5a4b3f]">
           Visível para

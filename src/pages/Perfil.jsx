@@ -1,5 +1,7 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import NavBar from '../components/NavBar'
+import { useAuth } from '../hooks/useAuth'
 
 const STORAGE_KEY = 'circulo_profile'
 
@@ -23,9 +25,19 @@ function readProfile() {
 }
 
 export default function Perfil() {
-  const [profile, setProfile] = useState(readProfile)
+  const navigate = useNavigate()
+  const { user, signOut } = useAuth()
+  const [profile, setProfile] = useState(() => {
+    const savedProfile = readProfile()
+    const authName = user?.user_metadata?.name || user?.email?.split('@')[0]
+    if (savedProfile.name === defaultProfile.name && authName) {
+      return { ...savedProfile, name: authName }
+    }
+    return savedProfile
+  })
   const [draft, setDraft] = useState(profile)
   const [saved, setSaved] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
 
   const toggleInterest = (interest) => {
     const updated = draft.interests.includes(interest)
@@ -44,6 +56,12 @@ export default function Perfil() {
     }
     setSaved(true)
     window.setTimeout(() => setSaved(false), 1400)
+  }
+
+  const handleSignOut = async () => {
+    setSigningOut(true)
+    await signOut()
+    navigate('/login')
   }
 
   return (
@@ -114,6 +132,15 @@ export default function Perfil() {
           </div>
         </div>
       </div>
+
+      <button
+        type="button"
+        onClick={handleSignOut}
+        disabled={signingOut}
+        className="mt-4 w-full rounded-full border border-[#eadfce] bg-white px-4 py-3 text-sm font-medium text-[#6b543f] disabled:opacity-60"
+      >
+        {signingOut ? 'Saindo…' : 'Sair'}
+      </button>
 
       <NavBar />
     </div>

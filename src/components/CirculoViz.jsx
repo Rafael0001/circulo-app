@@ -1,11 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
-import { Minus, Plus } from 'lucide-react'
+import { AlertTriangle, Minus, Plus, Zap } from 'lucide-react'
 
-const categoryOptions = {
-  necessidade: { icon: '🤝', label: 'necessidade', accent: '#F4956A', hint: 'ex: preciso de carona hoje' },
-  vontade: { icon: '✨', label: 'vontade', accent: '#4DC68B', hint: 'ex: querendo viajar pra Bahia' },
-  sonho: { icon: '🌙', label: 'sonho', accent: '#8B8FF8', hint: 'ex: abrir uma cafeteria' },
-  projeto: { icon: '🚀', label: 'projeto', accent: '#F0BA3A', hint: 'ex: lançando meu podcast' },
+const priorityFlags = {
+  is_importante: { icon: AlertTriangle, label: 'importante', accent: '#E8C87A', hint: 'marque quando for relevante' },
+  is_urgente: { icon: Zap, label: 'urgente', accent: '#F4956A', hint: 'marque quando precisar agora' },
 }
 
 const INNER_RADIUS = 110
@@ -59,8 +57,7 @@ export default function CirculoViz({
 
   const [selectedId, setSelectedId] = useState(null)
   const [showModal, setShowModal] = useState(false)
-  const [pulsoStep, setPulsoStep] = useState(1)
-  const [pulsoCategory, setPulsoCategory] = useState('necessidade')
+  const [pulsoFlags, setPulsoFlags] = useState({ is_importante: false, is_urgente: false })
   const [pulsoVisibility, setPulsoVisibility] = useState(defaultVisibility)
   const [pulsoText, setPulsoText] = useState('')
   const [centerHovered, setCenterHovered] = useState(false)
@@ -119,9 +116,8 @@ export default function CirculoViz({
 
   const closeModal = () => {
     setShowModal(false)
-    setPulsoStep(1)
     setPulsoText('')
-    setPulsoCategory('necessidade')
+    setPulsoFlags({ is_importante: false, is_urgente: false })
     setPulsoVisibility(defaultVisibility)
   }
 
@@ -207,7 +203,8 @@ export default function CirculoViz({
     }
 
     await onCreatePulso({
-      category: pulsoCategory,
+      is_importante: pulsoFlags.is_importante,
+      is_urgente: pulsoFlags.is_urgente,
       content,
       circle_visibility: visibilityValue,
     })
@@ -409,7 +406,7 @@ export default function CirculoViz({
                   <circle cx="300" cy="300" r="36" fill="none" stroke="#E8C87A" strokeWidth="1.1" opacity="0.42" className="center-pulse center-pulse-delayed" />
                 </>
               )}
-              <circle cx="300" cy="300" r="34" fill={centerHovered ? '#3A3A3A' : '#2A2A2A'} opacity="1" />
+              <circle cx="300" cy="300" r="34" fill={centerHovered ? '#352D29' : '#2A2420'} opacity="1" />
               <circle cx="300" cy="300" r="34" fill="none" stroke="#E8C87A" strokeWidth="1.5" opacity="0.7" className={centerBurst ? 'center-pulse' : ''} />
               <text x="300" y="306" textAnchor="middle" fontSize="11" letterSpacing="0.12em" fill="#E8C87A" fontWeight="700">
                 pulsar
@@ -454,26 +451,38 @@ export default function CirculoViz({
                     transition: isDragging ? 'none' : 'transform 0.2s ease',
                   }}
                 >
-                  {selectedPulsos.map((pulso) => (
-                    <div key={pulso.id} className="rounded-[12px] border border-[#f5eee8] bg-[#fffaf4] p-2.5">
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <span
-                          className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em]"
-                          style={{
-                            background: `${categoryOptions[pulso.category]?.accent ?? '#F4956A'}22`,
-                            color: categoryOptions[pulso.category]?.accent ?? '#F4956A',
-                          }}
-                        >
-                          <span>{categoryOptions[pulso.category]?.icon ?? '✦'}</span>
-                          {pulso.category}
-                        </span>
-                        <span className="text-[8px] uppercase tracking-[0.1em] text-[#8a7a69]">
-                          {formatPulsoTimestamp(pulso.created_at)}
-                        </span>
+                  {selectedPulsos.map((pulso) => {
+                    const activePulsoFlags = Object.entries(priorityFlags).filter(([key]) => pulso[key])
+
+                    return (
+                      <div key={pulso.id} className="rounded-[12px] border border-[#f5eee8] bg-[#fffaf4] p-2.5">
+                        <div className="mb-1 flex items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-1">
+                            {activePulsoFlags.map(([key, option]) => {
+                              const Icon = option.icon
+                              return (
+                                <span
+                                  key={`${pulso.id}-${key}`}
+                                  className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em]"
+                                  style={{
+                                    background: `${option.accent}22`,
+                                    color: option.accent,
+                                  }}
+                                >
+                                  <Icon className="h-2.5 w-2.5" fill="currentColor" strokeWidth={1.6} />
+                                  {option.label}
+                                </span>
+                              )
+                            })}
+                          </div>
+                          <span className="text-[8px] uppercase tracking-[0.1em] text-[#8a7a69]">
+                            {formatPulsoTimestamp(pulso.created_at)}
+                          </span>
+                        </div>
+                        <p className="text-[12px] leading-5 text-[#362f2b]">{pulso.content}</p>
                       </div>
-                      <p className="text-[12px] leading-5 text-[#362f2b]">{pulso.content}</p>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
 
                 <div
@@ -509,87 +518,84 @@ export default function CirculoViz({
                 <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#9a8e80]">novo pulso</span>
               </div>
 
-              {pulsoStep === 1 ? (
-                <>
-                  <p className="mb-3 text-sm font-medium text-[#4f4239]">Escolha a categoria</p>
-                  <div className="space-y-2">
-                    {Object.entries(categoryOptions).map(([key, option]) => {
-                      const isSelectedCategory = pulsoCategory === key
-
+              <div className="mb-3 flex items-center justify-between">
+                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#9a8e80]">novo pulso</span>
+                <div className="flex flex-wrap justify-end gap-1.5">
+                  {Object.entries(priorityFlags)
+                    .filter(([key]) => pulsoFlags[key])
+                    .map(([key, option]) => {
+                      const Icon = option.icon
                       return (
-                        <button
+                        <span
                           key={key}
-                          type="button"
-                          onClick={() => {
-                            setPulsoCategory(key)
-                            setPulsoStep(2)
-                          }}
-                          className="flex w-full items-center gap-3 rounded-[14px] border px-3 py-3 text-left transition"
-                          style={{
-                            borderColor: isSelectedCategory ? option.accent : '#f0e7de',
-                            background: isSelectedCategory ? `${option.accent}1A` : '#fffaf4',
-                          }}
+                          className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em]"
+                          style={{ background: `${option.accent}22`, color: option.accent }}
                         >
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full text-lg" style={{ background: `${option.accent}22`, color: option.accent }}>
-                            {option.icon}
-                          </span>
-                          <span className="flex-1">
-                            <span className="block text-sm font-semibold text-[#302b29]">{option.label}</span>
-                            <span className="block text-[11px] text-[#7b695d]">{option.hint}</span>
-                          </span>
-                        </button>
+                          <Icon className="h-3 w-3" fill="currentColor" strokeWidth={1.5} />
+                          {option.label}
+                        </span>
                       )
                     })}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="mb-3 flex items-center justify-between">
-                    <button type="button" onClick={() => setPulsoStep(1)} className="text-sm font-medium text-[#7b695d]">
-                      ← voltar
+                </div>
+              </div>
+
+              <p className="mb-3 text-sm font-medium text-[#4f4239]">Selecione as prioridades</p>
+              <div className="grid grid-cols-2 gap-2">
+                {Object.entries(priorityFlags).map(([key, option]) => {
+                  const isActive = pulsoFlags[key]
+
+                  return (
+                    <button
+                      key={key}
+                      type="button"
+                      onClick={() => setPulsoFlags((current) => ({ ...current, [key]: !current[key] }))}
+                      className="flex items-center justify-center gap-2 rounded-[14px] border px-3 py-3 text-left transition"
+                      style={{
+                        borderColor: isActive ? option.accent : '#f0e7de',
+                        background: isActive ? `${option.accent}1A` : '#fffaf4',
+                        color: isActive ? option.accent : '#5f4c3e',
+                      }}
+                    >
+                      <span className="flex h-9 w-9 items-center justify-center rounded-full" style={{ background: `${option.accent}22`, color: option.accent }}>
+                        <option.icon className="h-4 w-4" fill={isActive ? 'currentColor' : 'none'} strokeWidth={1.8} />
+                      </span>
+                      <span className="text-sm font-semibold text-inherit">{option.label}</span>
                     </button>
-                    <span
-                      className="inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]"
-                      style={{ background: `${categoryOptions[pulsoCategory].accent}22`, color: categoryOptions[pulsoCategory].accent }}
-                    >
-                      <span>{categoryOptions[pulsoCategory].icon}</span>
-                      {categoryOptions[pulsoCategory].label}
-                    </span>
-                  </div>
+                  )
+                })}
+              </div>
 
-                  <label className="mb-3 block text-sm text-[#5a4b3f]">
-                    Visível para
-                    <select
-                      value={visibilityValue}
-                      onChange={(event) => setPulsoVisibility(event.target.value)}
-                      className="mt-1 w-full rounded-2xl border border-[#eddcc7] bg-[#fffaf4] px-3 py-2.5 text-sm outline-none transition focus:border-[#d4a86d]"
-                    >
-                      {rings.map((ring) => (
-                        <option key={ring.id} value={ring.id}>
-                          {ring.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
+              <label className="mt-4 mb-3 block text-sm text-[#5a4b3f]">
+                Visível para
+                <select
+                  value={visibilityValue}
+                  onChange={(event) => setPulsoVisibility(event.target.value)}
+                  className="mt-1 w-full rounded-2xl border border-[#eddcc7] bg-[#fffaf4] px-3 py-2.5 text-sm outline-none transition focus:border-[#d4a86d]"
+                >
+                  {rings.map((ring) => (
+                    <option key={ring.id} value={ring.id}>
+                      {ring.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
 
-                  <textarea
-                    value={pulsoText}
-                    onChange={(event) => setPulsoText(event.target.value)}
-                    rows={5}
-                    placeholder="Escreva seu pulso..."
-                    className="w-full resize-none rounded-[14px] border border-[#f0e7de] bg-[#fffaf4] p-3 text-sm text-[#372f2a] outline-none placeholder:text-[#ad9b8b] focus:border-[#d3b888]"
-                  />
+              <textarea
+                value={pulsoText}
+                onChange={(event) => setPulsoText(event.target.value)}
+                rows={5}
+                placeholder="Escreva seu pulso..."
+                className="w-full resize-none rounded-[14px] border border-[#f0e7de] bg-[#fffaf4] p-3 text-sm text-[#372f2a] outline-none placeholder:text-[#ad9b8b] focus:border-[#d3b888]"
+              />
 
-                  <button
-                    type="button"
-                    onClick={handleCreate}
-                    disabled={!pulsoText.trim()}
-                    className="mt-4 w-full rounded-full bg-[#2A2A2A] px-4 py-3 text-sm font-semibold uppercase tracking-[0.16em] text-[#E8C87A] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    pulsar
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={!pulsoText.trim()}
+                className="mt-4 w-full rounded-full bg-[#2A2A2A] px-4 py-3 text-sm font-semibold uppercase tracking-[0.16em] text-[#E8C87A] disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                pulsar
+              </button>
             </div>
           </div>
         )}
