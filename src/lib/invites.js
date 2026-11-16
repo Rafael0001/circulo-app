@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from './supabase'
+import { mapFriendRecord, readFriends, upsertStoredFriend, writeFriends } from './friendsStorage'
 
 const DEMO_INVITES_KEY = 'circulo_invite_sessions'
 const EXPIRY_MS = 20 * 60 * 1000
@@ -48,7 +49,7 @@ function demoLookup(token, currentUserId) {
     avatar_url: invite.avatarUrl || null,
     creator_id: invite.userId,
     is_self: Boolean(currentUserId && currentUserId === invite.userId),
-    already_friends: false,
+    already_friends: readFriends(currentUserId).some((friend) => friend.id === invite.userId),
   }
 }
 
@@ -86,13 +87,49 @@ export async function lookupInvite(token, currentUserId) {
   return data
 }
 
-export async function acceptInvite(token, currentUserId) {
+export async function acceptInvite(token, currentUser) {
+  const currentUserId = currentUser?.id
+
   if (!isSupabaseConfigured) {
     const invite = demoLookup(token, currentUserId)
     if (invite.status !== 'ok') return { status: invite.status, error: { message: 'Convite inválido ou expirado.' } }
     if (invite.is_self) return { status: 'self', error: { message: 'Você não pode adicionar a si mesmo.' } }
+
+    const other = mapFriendRecord({
+      id: invite.creator_id,
+      name: invite.name,
+      avatar_url: invite.avatar_url,
+    })
+    const me = mapFriendRecord({
+      id: currentUserId,
+      name: currentUser?.name || currentUser?.user_metadata?.name || currentUser?.email?.split('@')[0] || 'Você',
+      avatar_url: currentUser?.avatar_url,
+    })
+
+    const already =
+      readFriends(currentUserId).some((friend) => friend.id === invite.creator_id) &&
+      readFriends(invite.creator_id).some((friend) => friend.id === currentUserId)
+
+    const snapshotMine = readFriends(currentUserId)
+    const snapshotTheirs = readFriends(invite.creator_id)
+
+    try {
+      upsertStoredFriend(currentUserId, other)
+      upsertStoredFriend(invite.creator_id, me)
+      if (
+        !readFriends(currentUserId).some((friend) => friend.id === invite.creator_id) ||
+        !readFriends(invite.creator_id).some((friend) => friend.id === currentUserId)
+      ) {
+        throw new Error('incomplete_relationship')
+      }
+    } catch (error) {
+      writeFriends(currentUserId, snapshotMine)
+      writeFriends(invite.creator_id, snapshotTheirs)
+      return { status: 'error', error }
+    }
+
     return {
-      status: 'created',
+      status: already ? 'already' : 'created',
       id: invite.creator_id,
       name: invite.name,
       avatar_url: invite.avatar_url,

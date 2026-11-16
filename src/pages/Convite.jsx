@@ -14,7 +14,7 @@ export default function Convite() {
   const { token } = useParams()
   const navigate = useNavigate()
   const { user, loading } = useAuth()
-  const { addFriend, friends, circles } = useFriends()
+  const { addFriend, friends, circles, refreshFriends } = useFriends()
   const [invite, setInvite] = useState(null)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
@@ -41,7 +41,11 @@ export default function Convite() {
   const handleAccept = async () => {
     setBusy(true)
     setError('')
-    const result = await acceptInvite(token, user?.id)
+    const result = await acceptInvite(token, {
+      id: user.id,
+      name: user.user_metadata?.name || user.email?.split('@')[0],
+      avatar_url: user.user_metadata?.avatar_url,
+    })
     setBusy(false)
 
     if (result.error && result.status !== 'already') {
@@ -62,6 +66,7 @@ export default function Convite() {
         })
 
     setAdded({ ...nextFriend, already: result.status === 'already' || alreadyInCircle })
+    await refreshFriends()
   }
 
   if (!invite || loading) {
