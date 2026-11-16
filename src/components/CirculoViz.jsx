@@ -83,17 +83,18 @@ export default function CirculoViz({
   const pulseMap = useMemo(
     () =>
       pulsos.reduce((memo, pulso) => {
-        if (!memo[pulso.author]) {
-          memo[pulso.author] = []
-        }
-
-        memo[pulso.author].push(pulso)
+        const keys = [pulso.user_id, pulso.author_id, pulso.author].filter(Boolean)
+        keys.forEach((key) => {
+          if (!memo[key]) memo[key] = []
+          if (!memo[key].some((item) => item.id === pulso.id)) memo[key].push(pulso)
+        })
         return memo
       }, {}),
     [pulsos],
   )
 
-  const selectedPulsos = selected ? pulseMap[selected.name] ?? [] : []
+  const pulsosForFriend = (friend) => pulseMap[friend?.id] ?? pulseMap[friend?.name] ?? []
+  const selectedPulsos = selected ? pulsosForFriend(selected) : []
   const selectedRing = selected ? rings.find((ring) => ring.id === selected.circle) : null
 
   const selectedCoordinates = useMemo(() => {
@@ -369,7 +370,7 @@ export default function CirculoViz({
                 const pos = polarToCartesian(angle, ring.radius)
                 const size = ring.size
                 const isSelected = selected?.id === friend.id
-                const hasPulse = Boolean((pulseMap[friend.name] ?? []).length)
+                const hasPulse = Boolean(pulsosForFriend(friend).length)
 
                 return (
                   <g
