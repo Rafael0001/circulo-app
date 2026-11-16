@@ -310,7 +310,6 @@ export default function CirculoViz({
                   fill="none"
                   stroke={ring.color}
                   strokeWidth={ring.index === 0 ? 2.5 : 1.5}
-                  strokeDasharray={ring.index === rings.length - 1 ? '6 8' : '0'}
                   opacity={0.85}
                   className="cursor-pointer"
                   onClick={(event) => openRingMenu(ring.id, event)}

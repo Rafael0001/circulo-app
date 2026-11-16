@@ -32,7 +32,11 @@ export function readFriends(userId) {
     const raw = localStorage.getItem(storageKey(FRIENDS_STORAGE_KEY, userId))
     if (!raw) return []
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : []
+    return Array.isArray(parsed)
+      ? parsed
+          .filter((friend) => friend && friend.id)
+          .map((friend) => ({ ...mapFriendRecord(friend), circle: friend.circle || 'conhecidos' }))
+      : []
   } catch {
     return []
   }
@@ -52,4 +56,12 @@ export function upsertStoredFriend(userId, person) {
   const current = readFriends(userId)
   if (current.some((friend) => friend.id === person.id)) return
   writeFriends(userId, [mapFriendRecord(person), ...current])
+}
+
+export function updateStoredFriendCircle(userId, friendId, circle) {
+  if (!userId || !friendId || !circle) return
+  writeFriends(
+    userId,
+    readFriends(userId).map((friend) => (friend.id === friendId ? { ...friend, circle } : friend)),
+  )
 }

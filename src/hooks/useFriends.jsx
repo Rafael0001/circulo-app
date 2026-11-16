@@ -6,6 +6,7 @@ import {
   mapFriendRecord,
   readFriends,
   storageKey,
+  updateStoredFriendCircle,
   upsertStoredFriend,
   writeFriends,
 } from '../lib/friendsStorage'
@@ -50,13 +51,16 @@ async function loadRemoteFriends(userId) {
     .select('friend_id, circle')
     .eq('user_id', userId)
 
-  if (error || !rows?.length) return []
+  if (error) throw error
+  if (!rows?.length) return []
 
   const ids = rows.map((row) => row.friend_id)
   const { data: profiles } = await supabase.from('profiles').select('id, name, avatar_url').in('id', ids)
   const byId = new Map((profiles || []).map((profile) => [profile.id, profile]))
 
-  return rows.map((row) => mapFriendRecord(byId.get(row.friend_id) || { id: row.friend_id, name: 'Amigo' }, row.circle))
+  return rows.map((row) =>
+    mapFriendRecord(byId.get(row.friend_id) || { id: row.friend_id, name: 'Amigo' }, row.circle || 'conhecidos'),
+  )
 }
 
 export function FriendsProvider({ children }) {
@@ -75,9 +79,13 @@ export function FriendsProvider({ children }) {
       return local
     }
 
-    const remote = await loadRemoteFriends(userId)
-    setFriends(remote)
-    return remote
+    try {
+      const remote = await loadRemoteFriends(userId)
+      setFriends(remote)
+      return remote
+    } catch {
+      return []
+    }
   }, [userId])
 
   useEffect(() => {
@@ -97,12 +105,19 @@ export function FriendsProvider({ children }) {
     }
 
     let cancelled = false
-    loadRemoteFriends(userId).then((remote) => {
-      if (!cancelled) {
-        setFriends(remote)
-        setHydratedFor(userId)
-      }
-    })
+    loadRemoteFriends(userId)
+      .then((remote) => {
+        if (!cancelled) {
+          setFriends(remote)
+          setHydratedFor(userId)
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setFriends([])
+          setHydratedFor(userId)
+        }
+      })
 
     return () => {
       cancelled = true
@@ -172,16 +187,48 @@ export function FriendsProvider({ children }) {
   )
 
   const moveFriend = useCallback(
-    (friendId, nextCircle) => {
-      setFriends((current) =>
-        current.map((friend) =>
-          friend.id === friendId ? { ...friend, circle: nextCircle } : friend,
-        ),
-      )
+    async (friendId, nextCircle) => {
+      if (!userId || !friendId || !nextCircle) return false
 
-      if (isSupabaseConfigured && supabase && userId) {
-        supabase.from('friendships').update({ circle: nextCircle }).eq('user_id', userId).eq('friend_id', friendId)
+      let previousCircle = null
+      let changed = false
+
+      setFriends((current) => {
+        const target = current.find((friend) => friend.id === friendId)
+        if (!target || target.circle === nextCircle) return current
+
+        previousCircle = target.circle
+        changed = true
+        const next = current.map((friend) => (friend.id === friendId ? { ...friend, circle: nextCircle } : friend))
+
+        if (!isSupabaseConfigured) writeFriends(userId, next)
+        return next
+      })
+
+      if (!changed) return true
+
+      if (!isSupabaseConfigured) {
+        updateStoredFriendCircle(userId, friendId, nextCircle)
+        return true
       }
+
+      const { data, error } = await supabase
+        .from('friendships')
+        .update({ circle: nextCircle })
+        .eq('user_id', userId)
+        .eq('friend_id', friendId)
+        .select('friend_id, circle')
+
+      if (error || !data?.length) {
+        setFriends((current) =>
+          current.map((friend) =>
+            friend.id === friendId ? { ...friend, circle: previousCircle || 'conhecidos' } : friend,
+          ),
+        )
+        return false
+      }
+
+      return true
     },
     [userId],
   )
@@ -241,15 +288,31 @@ export function FriendsProvider({ children }) {
       const nextCircles = currentCircles.filter((circle) => circle.id !== circleId)
       const fallbackId = nextCircles[nextCircles.length - 1]?.id
 
-      setFriends((currentFriends) =>
-        currentFriends.map((friend) =>
+      setFriends((currentFriends) => {
+        const nextFriends = currentFriends.map((friend) =>
           friend.circle === circleId ? { ...friend, circle: fallbackId } : friend,
-        ),
-      )
+        )
+
+        if (!isSupabaseConfigured && userId) writeFriends(userId, nextFriends)
+
+        if (isSupabaseConfigured && supabase && userId && fallbackId) {
+          currentFriends
+            .filter((friend) => friend.circle === circleId)
+            .forEach((friend) => {
+              supabase
+                .from('friendships')
+                .update({ circle: fallbackId })
+                .eq('user_id', userId)
+                .eq('friend_id', friend.id)
+            })
+        }
+
+        return nextFriends
+      })
 
       return nextCircles
     })
-  }, [])
+  }, [userId])
 
   const value = useMemo(
     () => ({
