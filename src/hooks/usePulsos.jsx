@@ -3,10 +3,10 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { useFriends } from './useFriends'
 import { readFriends, storageKey } from '../lib/friendsStorage'
+import { BASE_CIRCLE_IDS, pulsoReachesPlacement } from '../lib/pulsoVisibility'
 
 const STORAGE_KEY = 'circulo_pulsos'
 const CIRCLES_STORAGE_KEY = 'circulo_circles'
-const BASE_CIRCLE_IDS = ['intimos', 'amigos', 'conhecidos']
 
 const PulsosContext = createContext(null)
 
@@ -66,22 +66,12 @@ function readAuthorCircleIds(authorId) {
   }
 }
 
-function circleRank(circleIds, circleId) {
-  const index = circleIds.indexOf(circleId)
-  if (index >= 0) return index
-  const fallback = BASE_CIRCLE_IDS.indexOf(circleId)
-  return fallback >= 0 ? fallback : circleIds.length
-}
-
 function isPulsoVisibleTo(viewerId, pulso, placementCircle, authorCircleIds) {
   if (!pulso) return false
   if (pulso.user_id === viewerId) return true
   if (pulso.expires_at && new Date(pulso.expires_at).getTime() < Date.now()) return false
-  if (!placementCircle) return false
 
-  const viewerRank = circleRank(authorCircleIds, placementCircle)
-  const visibilityRank = circleRank(authorCircleIds, pulso.circle_visibility || 'conhecidos')
-  return viewerRank <= visibilityRank
+  return pulsoReachesPlacement(pulso.circle_visibility, placementCircle, authorCircleIds)
 }
 
 function loadDemoPulsos(userId, friends) {
@@ -109,25 +99,19 @@ async function loadRemotePulsos(userId) {
   const { data: rows, error } = await supabase
     .from('pulsos')
     .select('id, user_id, content, is_importante, is_urgente, circle_visibility, created_at, expires_at')
+    .or('expires_at.is.null,expires_at.gt.now()')
     .order('created_at', { ascending: false })
 
   if (error) throw error
   if (!rows?.length) return []
 
   const authorIds = [...new Set(rows.map((row) => row.user_id))]
-  const [{ data: profiles }, { data: placements }] = await Promise.all([
-    supabase.from('profiles').select('id, name').in('id', authorIds),
-    supabase.from('friendships').select('user_id, circle').eq('friend_id', userId),
-  ])
-
+  const { data: profiles } = await supabase.from('profiles').select('id, name').in('id', authorIds)
   const names = new Map((profiles || []).map((profile) => [profile.id, profile.name]))
-  const placedBy = new Map((placements || []).map((row) => [row.user_id, row.circle]))
 
-  return rows
-    .map((row) => normalizePulso(row, names.get(row.user_id) || (row.user_id === userId ? 'Você' : 'Amigo')))
-    .filter((pulso) =>
-      isPulsoVisibleTo(userId, pulso, pulso.user_id === userId ? 'intimos' : placedBy.get(pulso.user_id), BASE_CIRCLE_IDS),
-    )
+  return rows.map((row) =>
+    normalizePulso(row, names.get(row.user_id) || (row.user_id === userId ? 'Você' : 'Amigo')),
+  )
 }
 
 export function PulsosProvider({ children }) {
@@ -201,8 +185,13 @@ export function PulsosProvider({ children }) {
       if (document.visibilityState === 'visible') refreshPulsos()
     }
 
+    const onStorage = (event) => {
+      if (!event.key || event.key.startsWith(`${STORAGE_KEY}:`)) refreshPulsos()
+    }
+
     window.addEventListener('focus', onVisible)
     document.addEventListener('visibilitychange', onVisible)
+    window.addEventListener('storage', onStorage)
 
     let channel = null
     if (isSupabaseConfigured && supabase) {
@@ -217,6 +206,7 @@ export function PulsosProvider({ children }) {
     return () => {
       window.removeEventListener('focus', onVisible)
       document.removeEventListener('visibilitychange', onVisible)
+      window.removeEventListener('storage', onStorage)
       if (channel) supabase.removeChannel(channel)
     }
   }, [userId, refreshPulsos])

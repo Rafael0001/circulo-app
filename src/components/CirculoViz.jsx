@@ -1,5 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Minus, Pencil, Plus, Trash2, Zap } from 'lucide-react'
+import { visibilityHint, visibilityOptionLabel } from '../lib/pulsoVisibility'
 
 const priorityFlags = {
   is_importante: { icon: AlertTriangle, label: 'importante', accent: '#E8C87A', hint: 'marque quando for relevante' },
@@ -645,10 +646,11 @@ export default function CirculoViz({
                 >
                   {rings.map((ring) => (
                     <option key={ring.id} value={ring.id}>
-                      {ring.label}
+                      {visibilityOptionLabel(circles, ring)}
                     </option>
                   ))}
                 </select>
+                <span className="mt-1.5 block text-[11px] text-[#8d7c6b]">{visibilityHint(circles, visibilityValue)}</span>
               </label>
 
               <textarea

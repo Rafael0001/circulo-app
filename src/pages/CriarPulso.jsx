@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router-dom'
 import NavBar from '../components/NavBar'
 import { useFriends } from '../hooks/useFriends'
 import { usePulsos } from '../hooks/usePulsos'
+import { visibilityHint, visibilityOptionLabel } from '../lib/pulsoVisibility'
 
 const priorityFlags = [
   {
@@ -102,10 +103,11 @@ export default function CriarPulso() {
           >
             {circles.map((circle) => (
               <option key={circle.id} value={circle.id}>
-                {circle.label}
+                {visibilityOptionLabel(circles, circle)}
               </option>
             ))}
           </select>
+          <span className="mt-1.5 block text-xs text-[#8d7c6b]">{visibilityHint(circles, visibilityValue)}</span>
         </label>
 
         <label className="mt-4 block text-sm text-[#5a4b3f]">
