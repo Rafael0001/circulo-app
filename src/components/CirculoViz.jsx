@@ -1,5 +1,5 @@
 import { useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Minus, Plus, Zap } from 'lucide-react'
+import { AlertTriangle, Minus, Pencil, Plus, Trash2, Zap } from 'lucide-react'
 
 const priorityFlags = {
   is_importante: { icon: AlertTriangle, label: 'importante', accent: '#E8C87A', hint: 'marque quando for relevante' },
@@ -50,6 +50,7 @@ export default function CirculoViz({
   onMoveFriend,
   onAddCircle,
   onRenameCircle,
+  onRemoveCircle,
   onCreatePulso,
 }) {
   const rings = useMemo(() => ringsFromCircles(circles), [circles])
@@ -67,6 +68,9 @@ export default function CirculoViz({
   const [zoom, setZoom] = useState(1)
   const [editingId, setEditingId] = useState(null)
   const [editingLabel, setEditingLabel] = useState('')
+  const [menuRingId, setMenuRingId] = useState(null)
+  const [menuPos, setMenuPos] = useState({ x: 0, y: 0 })
+  const vizRef = useRef(null)
   const dragStartRef = useRef({ y: 0, lift: 0 })
   const isDraggingRef = useRef(false)
   const dragHandleRef = useRef(null)
@@ -137,9 +141,39 @@ export default function CirculoViz({
   }
 
   const startRename = (ring) => {
+    setMenuRingId(null)
     setEditingId(ring.id)
     setEditingLabel(ring.label)
   }
+
+  const openRingMenu = (ringId, event) => {
+    event?.stopPropagation()
+    setEditingId(null)
+
+    setMenuRingId((current) => {
+      if (current === ringId) {
+        return null
+      }
+
+      const bounds = vizRef.current?.getBoundingClientRect()
+      if (event && bounds) {
+        const menuWidth = 84
+        const menuHeight = 40
+        const gap = 10
+        const clickX = event.clientX - bounds.left
+        const clickY = event.clientY - bounds.top
+        const placeRight = clickX + gap + menuWidth < bounds.width - 8
+        const x = placeRight ? clickX + gap : clickX - gap - menuWidth
+        const y = Math.min(Math.max(clickY - menuHeight / 2, 8), bounds.height - menuHeight - 8)
+        setMenuPos({ x, y })
+      }
+
+      return ringId
+    })
+  }
+
+  const menuRing = rings.find((ring) => ring.id === menuRingId) ?? null
+  const canRemoveCircle = circles.length > 1
 
   const handlePointerDown = (event) => {
     if (selectedPulsos.length <= 1) {
@@ -251,7 +285,7 @@ export default function CirculoViz({
         <p className="mb-2 px-1 text-[10px] uppercase tracking-[0.14em] text-[#a37d5a]">máximo de 5 círculos</p>
       ) : null}
 
-      <div className="relative overflow-hidden rounded-[24px]">
+      <div ref={vizRef} className="relative overflow-hidden rounded-[24px]">
         <div
           className="origin-center transition-transform duration-200"
           style={{ transform: `scale(${zoom})` }}
@@ -278,6 +312,18 @@ export default function CirculoViz({
                   strokeWidth={ring.index === 0 ? 2.5 : 1.5}
                   strokeDasharray={ring.index === rings.length - 1 ? '6 8' : '0'}
                   opacity={0.85}
+                  className="cursor-pointer"
+                  onClick={(event) => openRingMenu(ring.id, event)}
+                />
+                <circle
+                  cx="300"
+                  cy="300"
+                  r={ring.radius}
+                  fill="none"
+                  stroke="transparent"
+                  strokeWidth="18"
+                  className="cursor-pointer"
+                  onClick={(event) => openRingMenu(ring.id, event)}
                 />
                 {editingId === ring.id ? (
                   <foreignObject x="175" y={300 - ring.radius - 2} width="250" height="28">
@@ -307,10 +353,7 @@ export default function CirculoViz({
                     letterSpacing="0.16em"
                     fill={ring.color}
                     className="cursor-pointer font-semibold uppercase"
-                    onClick={(event) => {
-                      event.stopPropagation()
-                      startRename(ring)
-                    }}
+                    onClick={(event) => openRingMenu(ring.id, event)}
                   >
                     {ring.label}
                   </text>
@@ -414,6 +457,34 @@ export default function CirculoViz({
             </g>
           </svg>
         </div>
+
+        {menuRing ? (
+          <div
+            className="absolute z-30 flex items-center gap-1 rounded-full border border-[#eadfce] bg-white/95 p-1 shadow-[0_10px_24px_rgba(80,60,40,0.14)]"
+            style={{ left: menuPos.x, top: menuPos.y }}
+          >
+            <button
+              type="button"
+              onClick={() => startRename(menuRing)}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f7ead8] text-[#6a4a2e]"
+              aria-label="Renomear círculo"
+            >
+              <Pencil size={14} />
+            </button>
+            <button
+              type="button"
+              disabled={!canRemoveCircle || typeof onRemoveCircle !== 'function'}
+              onClick={() => {
+                onRemoveCircle?.(menuRing.id)
+                setMenuRingId(null)
+              }}
+              className="flex h-8 w-8 items-center justify-center rounded-full bg-[#f8e4dc] text-[#8a4a38] disabled:cursor-not-allowed disabled:opacity-40"
+              aria-label="Excluir círculo"
+            >
+              <Trash2 size={14} />
+            </button>
+          </div>
+        ) : null}
 
         {selectedPulsos.length > 0 && selectedCoordinates && (
           <div className="absolute inset-0 z-20" onClick={closeFriendPopover}>

@@ -2,8 +2,16 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useState } 
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 const DEMO_STORAGE_KEY = 'circulo_demo_session'
+const DEMO_USERS_KEY = 'circulo_demo_users'
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 const MIN_PASSWORD_LENGTH = 6
+
+const DEMO_ADMIN = {
+  email: 'admin@circulo.local',
+  password: 'circulo-admin',
+  name: 'Admin',
+  role: 'admin',
+}
 
 const AuthContext = createContext(null)
 
@@ -55,12 +63,57 @@ function persistDemoUser(user) {
   }
 }
 
+function isAdminEmail(email) {
+  return email.trim().toLowerCase() === DEMO_ADMIN.email
+}
+
+function readDemoAccounts() {
+  try {
+    const raw = localStorage.getItem(DEMO_USERS_KEY)
+    if (!raw) return []
+    const parsed = JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : []
+  } catch {
+    return []
+  }
+}
+
+function persistDemoAccounts(accounts) {
+  try {
+    localStorage.setItem(DEMO_USERS_KEY, JSON.stringify(accounts))
+  } catch {
+    // ignore
+  }
+}
+
+function ensureDemoAdminAccount() {
+  const accounts = readDemoAccounts()
+  const exists = accounts.some((account) => account.email?.toLowerCase() === DEMO_ADMIN.email)
+  if (exists) return accounts
+
+  const next = [...accounts, { ...DEMO_ADMIN }]
+  persistDemoAccounts(next)
+  return next
+}
+
+function buildUser({ email, name, role }) {
+  return {
+    id: `demo-${email}`,
+    email,
+    user_metadata: {
+      name: name || email.split('@')[0],
+      role: role || (isAdminEmail(email) ? 'admin' : 'user'),
+    },
+  }
+}
+
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(() => (isSupabaseConfigured ? null : readDemoUser()))
   const [loading, setLoading] = useState(() => Boolean(isSupabaseConfigured))
 
   useEffect(() => {
     if (!isSupabaseConfigured) {
+      ensureDemoAdminAccount()
       return undefined
     }
 
@@ -95,11 +148,18 @@ export function AuthProvider({ children }) {
     const trimmedEmail = email.trim()
 
     if (!isSupabaseConfigured) {
-      const nextUser = {
-        id: `demo-${trimmedEmail}`,
-        email: trimmedEmail,
-        user_metadata: { name: trimmedEmail.split('@')[0] },
+      const accounts = ensureDemoAdminAccount()
+      const saved = accounts.find((account) => account.email.toLowerCase() === trimmedEmail.toLowerCase())
+
+      if (saved && saved.password !== password) {
+        return { data: null, error: { message: 'E-mail ou senha inválidos.' } }
       }
+
+      const nextUser = buildUser({
+        email: trimmedEmail,
+        name: saved?.name || trimmedEmail.split('@')[0],
+        role: saved?.role,
+      })
       persistDemoUser(nextUser)
       setUser(nextUser)
       return { data: { user: nextUser }, error: null }
@@ -120,11 +180,16 @@ export function AuthProvider({ children }) {
     const trimmedName = name.trim()
 
     if (!isSupabaseConfigured) {
-      const nextUser = {
-        id: `demo-${trimmedEmail}`,
-        email: trimmedEmail,
-        user_metadata: { name: trimmedName },
+      const accounts = ensureDemoAdminAccount()
+      const already = accounts.some((account) => account.email.toLowerCase() === trimmedEmail.toLowerCase())
+      if (already) {
+        return { data: null, error: { message: 'Já existe uma conta com este e-mail.' } }
       }
+
+      const role = isAdminEmail(trimmedEmail) ? 'admin' : 'user'
+      persistDemoAccounts([...accounts, { email: trimmedEmail, password, name: trimmedName, role }])
+
+      const nextUser = buildUser({ email: trimmedEmail, name: trimmedName, role })
       persistDemoUser(nextUser)
       setUser(nextUser)
       return { data: { user: nextUser }, error: null }
@@ -133,7 +198,7 @@ export function AuthProvider({ children }) {
     const { data, error } = await supabase.auth.signUp({
       email: trimmedEmail,
       password,
-      options: { data: { name: trimmedName } },
+      options: { data: { name: trimmedName, role: isAdminEmail(trimmedEmail) ? 'admin' : 'user' } },
     })
     if (!error) setUser(data.user)
     return { data, error }
@@ -170,7 +235,16 @@ export function AuthProvider({ children }) {
   }, [])
 
   const value = useMemo(
-    () => ({ user, loading, signIn, signUp, signInWithGoogle, signOut, isDemo: !isSupabaseConfigured }),
+    () => ({
+      user,
+      loading,
+      signIn,
+      signUp,
+      signInWithGoogle,
+      signOut,
+      isDemo: !isSupabaseConfigured,
+      isAdmin: user?.user_metadata?.role === 'admin',
+    }),
     [user, loading, signIn, signUp, signInWithGoogle, signOut],
   )
 

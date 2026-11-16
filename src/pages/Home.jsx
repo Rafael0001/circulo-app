@@ -5,7 +5,7 @@ import { useFriends } from '../hooks/useFriends'
 import { usePulsos } from '../hooks/usePulsos'
 
 export default function Home() {
-  const { friends, circles, maxCircles, moveFriend, addCircle, renameCircle } = useFriends()
+  const { friends, circles, maxCircles, moveFriend, addCircle, renameCircle, removeCircle } = useFriends()
   const { pulsos, criarPulso } = usePulsos()
 
   return (
@@ -16,7 +16,7 @@ export default function Home() {
           <h1 className="mt-1 text-3xl font-semibold text-[#2e2926]">Círculo</h1>
         </div>
         <div className="rounded-full bg-[#f7e8d2] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8b5f38]">
-          {friends.length} amigos
+          {friends.length === 0 ? 'vazio' : `${friends.length} amigos`}
         </div>
       </header>
 
@@ -28,6 +28,7 @@ export default function Home() {
         onMoveFriend={moveFriend}
         onAddCircle={addCircle}
         onRenameCircle={renameCircle}
+        onRemoveCircle={removeCircle}
         onCreatePulso={criarPulso}
       />
 

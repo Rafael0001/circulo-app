@@ -1,17 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { useAuth } from './useAuth'
 
 const FRIENDS_STORAGE_KEY = 'circulo_friends'
 const CIRCLES_STORAGE_KEY = 'circulo_circles'
 const MAX_CIRCLES = 5
-
-const BASE_FRIENDS = [
-  { id: 'f1', name: 'Ana', initials: 'AN', circle: 'intimos', avatarColor: '#f6c65f' },
-  { id: 'f2', name: 'Rafa', initials: 'RA', circle: 'intimos', avatarColor: '#8ed8c8' },
-  { id: 'f3', name: 'João', initials: 'JO', circle: 'amigos', avatarColor: '#b7b3ee' },
-  { id: 'f4', name: 'Mari', initials: 'MA', circle: 'amigos', avatarColor: '#f6a89a' },
-  { id: 'f5', name: 'Bia', initials: 'BI', circle: 'conhecidos', avatarColor: '#d9c7f5' },
-  { id: 'f6', name: 'Lu', initials: 'LU', circle: 'conhecidos', avatarColor: '#9ac4ef' },
-]
 
 const BASE_CIRCLES = [
   { id: 'intimos', label: 'íntimos', color: '#f0c575' },
@@ -23,20 +15,28 @@ const CIRCLE_COLORS = ['#f0c575', '#7ccdc2', '#ad9ae9', '#f0a3c2', '#8ec5e8']
 
 const FriendsContext = createContext(null)
 
-function readFriends() {
+function storageKey(base, userId) {
+  return `${base}:${userId}`
+}
+
+function readFriends(userId) {
+  if (!userId) return []
+
   try {
-    const raw = localStorage.getItem(FRIENDS_STORAGE_KEY)
-    if (!raw) return BASE_FRIENDS
+    const raw = localStorage.getItem(storageKey(FRIENDS_STORAGE_KEY, userId))
+    if (!raw) return []
     const parsed = JSON.parse(raw)
-    return Array.isArray(parsed) ? parsed : BASE_FRIENDS
+    return Array.isArray(parsed) ? parsed : []
   } catch {
-    return BASE_FRIENDS
+    return []
   }
 }
 
-function readCircles() {
+function readCircles(userId) {
+  if (!userId) return BASE_CIRCLES
+
   try {
-    const raw = localStorage.getItem(CIRCLES_STORAGE_KEY)
+    const raw = localStorage.getItem(storageKey(CIRCLES_STORAGE_KEY, userId))
     if (!raw) return BASE_CIRCLES
     const parsed = JSON.parse(raw)
     if (!Array.isArray(parsed) || parsed.length === 0) return BASE_CIRCLES
@@ -54,24 +54,44 @@ function readCircles() {
 }
 
 export function FriendsProvider({ children }) {
-  const [friends, setFriends] = useState(readFriends)
-  const [circles, setCircles] = useState(readCircles)
+  const { user } = useAuth()
+  const userId = user?.id ?? null
+  const [friends, setFriends] = useState([])
+  const [circles, setCircles] = useState(BASE_CIRCLES)
+  const [hydratedFor, setHydratedFor] = useState(null)
 
   useEffect(() => {
+    if (!userId) {
+      setFriends([])
+      setCircles(BASE_CIRCLES)
+      setHydratedFor(null)
+      return
+    }
+
+    setFriends(readFriends(userId))
+    setCircles(readCircles(userId))
+    setHydratedFor(userId)
+  }, [userId])
+
+  useEffect(() => {
+    if (!userId || hydratedFor !== userId) return
+
     try {
-      localStorage.setItem(FRIENDS_STORAGE_KEY, JSON.stringify(friends))
+      localStorage.setItem(storageKey(FRIENDS_STORAGE_KEY, userId), JSON.stringify(friends))
     } catch {
       // ignore quota / private mode
     }
-  }, [friends])
+  }, [friends, userId, hydratedFor])
 
   useEffect(() => {
+    if (!userId || hydratedFor !== userId) return
+
     try {
-      localStorage.setItem(CIRCLES_STORAGE_KEY, JSON.stringify(circles))
+      localStorage.setItem(storageKey(CIRCLES_STORAGE_KEY, userId), JSON.stringify(circles))
     } catch {
       // ignore quota / private mode
     }
-  }, [circles])
+  }, [circles, userId, hydratedFor])
 
   const outermostId = circles[circles.length - 1]?.id ?? 'conhecidos'
 
@@ -134,6 +154,23 @@ export function FriendsProvider({ children }) {
     )
   }, [])
 
+  const removeCircle = useCallback((circleId) => {
+    setCircles((currentCircles) => {
+      if (currentCircles.length <= 1) return currentCircles
+
+      const nextCircles = currentCircles.filter((circle) => circle.id !== circleId)
+      const fallbackId = nextCircles[nextCircles.length - 1]?.id
+
+      setFriends((currentFriends) =>
+        currentFriends.map((friend) =>
+          friend.circle === circleId ? { ...friend, circle: fallbackId } : friend,
+        ),
+      )
+
+      return nextCircles
+    })
+  }, [])
+
   const value = useMemo(
     () => ({
       friends,
@@ -143,9 +180,10 @@ export function FriendsProvider({ children }) {
       addFriend,
       addCircle,
       renameCircle,
+      removeCircle,
       circleOptions,
     }),
-    [friends, circles, moveFriend, addFriend, addCircle, renameCircle, circleOptions],
+    [friends, circles, moveFriend, addFriend, addCircle, renameCircle, removeCircle, circleOptions],
   )
 
   return <FriendsContext.Provider value={value}>{children}</FriendsContext.Provider>
