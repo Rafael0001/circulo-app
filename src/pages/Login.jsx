@@ -1,12 +1,15 @@
 import { useState } from 'react'
-import { Link, useNavigate } from 'react-router-dom'
+import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { isSupabaseConfigured } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import GoogleSignInButton from '../components/GoogleSignInButton'
+import { nextFromSearch, rememberAuthNext } from '../lib/authRedirect'
 
 export default function Login() {
   const navigate = useNavigate()
+  const location = useLocation()
   const { signIn, signInWithGoogle } = useAuth()
+  const nextPath = nextFromSearch(location.search) || '/'
   const [form, setForm] = useState({
     email: '',
     password: '',
@@ -28,10 +31,11 @@ export default function Login() {
       return
     }
 
-    navigate('/')
+    navigate(nextPath)
   }
 
   const handleGoogle = async () => {
+    rememberAuthNext(nextPath)
     setError('')
     setGoogleBusy(true)
     const { error: googleError } = await signInWithGoogle()
@@ -101,7 +105,10 @@ export default function Login() {
 
         <p className="mt-5 text-center text-sm text-[#72655d]">
           Novo por aqui?{' '}
-          <Link to="/cadastro" className="font-semibold text-[#8f6545]">
+          <Link
+            to={nextPath.startsWith('/convite/') ? `/cadastro?next=${encodeURIComponent(nextPath)}` : '/cadastro'}
+            className="font-semibold text-[#8f6545]"
+          >
             criar conta
           </Link>
         </p>

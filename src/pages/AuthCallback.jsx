@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { Link, useNavigate, useSearchParams } from 'react-router-dom'
 import { useAuth } from '../hooks/useAuth'
+import { consumeAuthNext } from '../lib/authRedirect'
 
 export default function AuthCallback() {
   const { user, loading } = useAuth()
@@ -14,7 +15,7 @@ export default function AuthCallback() {
     }
 
     if (user) {
-      navigate('/', { replace: true })
+      navigate(consumeAuthNext() || '/', { replace: true })
       return undefined
     }
 
