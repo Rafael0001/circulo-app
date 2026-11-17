@@ -2,15 +2,15 @@ const STORAGE_KEY = 'circulo_onboarding_seen'
 
 export const ONBOARDING_SLIDES = [
   {
-    image: '/onboarding/1.png',
+    image: '/onboarding/1.png?v=full',
     title: 'Visualize suas conexões em círculos',
   },
   {
-    image: '/onboarding/2.png',
+    image: '/onboarding/2.png?v=full',
     title: 'Categorize por nível de intimidade',
   },
   {
-    image: '/onboarding/3.png',
+    image: '/onboarding/3.png?v=full',
     title: 'Crie pulsos. Compartilhe, adicione fotos, comente',
   },
 ]
