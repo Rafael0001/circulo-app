@@ -1,3 +1,4 @@
+import { useNavigate } from 'react-router-dom'
 import NavBar from '../components/NavBar'
 import CirculoViz from '../components/CirculoViz'
 import PulsoCard from '../components/PulsoCard'
@@ -5,7 +6,8 @@ import { useFriends } from '../hooks/useFriends'
 import { usePulsos } from '../hooks/usePulsos'
 
 export default function Home() {
-  const { friends, circles, maxCircles, moveFriend, addCircle, renameCircle, removeCircle } = useFriends()
+  const navigate = useNavigate()
+  const { friends, circles, maxCircles, moveFriend, muteFriend, unmuteFriend, removeFromCircle, blockPerson, addCircle, renameCircle, removeCircle } = useFriends()
   const { pulsos, criarPulso } = usePulsos()
 
   return (
@@ -26,6 +28,11 @@ export default function Home() {
         maxCircles={maxCircles}
         pulsos={pulsos}
         onMoveFriend={moveFriend}
+        onViewProfile={(friend) => navigate(`/perfil/${friend.id}`, { state: { from: '/' } })}
+        onMuteFriend={muteFriend}
+        onUnmuteFriend={unmuteFriend}
+        onRemoveFriend={removeFromCircle}
+        onBlockFriend={blockPerson}
         onAddCircle={addCircle}
         onRenameCircle={renameCircle}
         onRemoveCircle={removeCircle}

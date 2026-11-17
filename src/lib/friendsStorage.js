@@ -22,6 +22,7 @@ export function mapFriendRecord(person, circle) {
     avatarColor: colorForId(person.id),
     avatarUrl: person.avatar_url || person.avatarUrl || null,
     circle: circle || person.circle || 'conhecidos',
+    muted: Boolean(person.muted),
   }
 }
 
@@ -35,7 +36,7 @@ export function readFriends(userId) {
     return Array.isArray(parsed)
       ? parsed
           .filter((friend) => friend && friend.id)
-          .map((friend) => ({ ...mapFriendRecord(friend), circle: friend.circle || 'conhecidos' }))
+          .map((friend) => mapFriendRecord(friend, friend.circle))
       : []
   } catch {
     return []
@@ -63,5 +64,25 @@ export function updateStoredFriendCircle(userId, friendId, circle) {
   writeFriends(
     userId,
     readFriends(userId).map((friend) => (friend.id === friendId ? { ...friend, circle } : friend)),
+  )
+}
+
+export function updateStoredFriendMuted(userId, friendId, muted) {
+  if (!userId || !friendId) return
+  writeFriends(
+    userId,
+    readFriends(userId).map((friend) => (friend.id === friendId ? { ...friend, muted: Boolean(muted) } : friend)),
+  )
+}
+
+export function removeStoredFriendPair(userId, friendId) {
+  if (!userId || !friendId) return
+  writeFriends(
+    userId,
+    readFriends(userId).filter((friend) => friend.id !== friendId),
+  )
+  writeFriends(
+    friendId,
+    readFriends(friendId).filter((friend) => friend.id !== userId),
   )
 }

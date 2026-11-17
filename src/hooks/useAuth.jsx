@@ -216,8 +216,25 @@ export function AuthProvider({ children }) {
       provider: 'google',
       options: {
         redirectTo: `${window.location.origin}/auth/callback`,
+        queryParams: {
+          access_type: 'online',
+          prompt: 'select_account',
+        },
       },
     })
+
+    if (error) {
+      const message = error.message || ''
+      if (/provider is not enabled|unsupported provider|validation_failed/i.test(message)) {
+        return {
+          data: null,
+          error: {
+            message:
+              'O login com Google ainda não está ativado neste projeto. Use e-mail e senha, ou ative o provedor Google no Supabase.',
+          },
+        }
+      }
+    }
 
     return { data, error }
   }, [])

@@ -1,6 +1,7 @@
 import { useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Minus, Pencil, Plus, Trash2, Zap } from 'lucide-react'
 import { visibilityHint, visibilityOptionLabel } from '../lib/pulsoVisibility'
+import ConnectionPanel from './ConnectionPanel'
 
 const priorityFlags = {
   is_importante: { icon: AlertTriangle, label: 'importante', accent: '#E8C87A', hint: 'marque quando for relevante' },
@@ -49,6 +50,11 @@ export default function CirculoViz({
   maxCircles = 5,
   pulsos,
   onMoveFriend,
+  onViewProfile,
+  onMuteFriend,
+  onUnmuteFriend,
+  onRemoveFriend,
+  onBlockFriend,
   onAddCircle,
   onRenameCircle,
   onRemoveCircle,
@@ -426,9 +432,26 @@ export default function CirculoViz({
                       opacity={1}
                     />
 
-                    <text x="0" y="4" textAnchor="middle" fontSize={Math.max(10, size * 0.45)} fontWeight="700" fill={isSelected ? '#fff' : '#4b4f5b'}>
-                      {friend.initials}
-                    </text>
+                    {friend.avatarUrl ? (
+                      <>
+                        <clipPath id={`avatar-${friend.id}`}>
+                          <circle r={size - 2} />
+                        </clipPath>
+                        <image
+                          href={friend.avatarUrl}
+                          x={-(size - 2)}
+                          y={-(size - 2)}
+                          width={(size - 2) * 2}
+                          height={(size - 2) * 2}
+                          clipPath={`url(#avatar-${friend.id})`}
+                          preserveAspectRatio="xMidYMid slice"
+                        />
+                      </>
+                    ) : (
+                      <text x="0" y="4" textAnchor="middle" fontSize={Math.max(10, size * 0.45)} fontWeight="700" fill={isSelected ? '#fff' : '#4b4f5b'}>
+                        {friend.initials}
+                      </text>
+                    )}
 
                     <text x="0" y={size + 16} textAnchor="middle" fontSize="10" fill="#685f57">
                       {friend.name}
@@ -494,8 +517,8 @@ export default function CirculoViz({
               onClick={(event) => event.stopPropagation()}
               style={{
                 left: `${Math.min(Math.max(selectedCoordinates.x * 100, 18), 82)}%`,
-                top: `${Math.min(Math.max(selectedCoordinates.y * 100, 22), 78)}%`,
-                transform: 'translate(-50%, 0)',
+                top: `${Math.min(Math.max(selectedCoordinates.y * 100, 12), 88)}%`,
+                transform: selectedCoordinates.y > 0.5 ? 'translate(-50%, calc(-100% - 12px))' : 'translate(-50%, 12px)',
               }}
             >
               <div className="mb-2 flex items-center justify-between gap-2">
@@ -674,27 +697,22 @@ export default function CirculoViz({
         )}
       </div>
 
-      {selected && onMoveFriend && (
-        <div className="mt-4 rounded-[20px] border border-[#f0e2d7] bg-[#fffaf4] p-3">
-          <p className="mb-2 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#8b7870]">mover {selected.name}</p>
-          <div className="flex flex-wrap gap-2">
-            {rings.map((ring) => (
-              <button
-                key={ring.id}
-                type="button"
-                onClick={() => onMoveFriend(selected.id, ring.id)}
-                className={`rounded-full border px-2.5 py-1 text-[11px] font-medium ${
-                  selected.circle === ring.id
-                    ? 'border-transparent bg-[#ead3a9] text-[#5c4733]'
-                    : 'border-[#e7d8ca] bg-white text-[#6f5a4a]'
-                }`}
-              >
-                {ring.label}
-              </button>
-            ))}
-          </div>
-        </div>
-      )}
+      {selected ? (
+        <ConnectionPanel
+          friend={selected}
+          circles={rings}
+          onViewProfile={onViewProfile}
+          onMoveFriend={onMoveFriend}
+          onMute={onMuteFriend}
+          onUnmute={onUnmuteFriend}
+          onRemove={async (friendId) => {
+            const ok = await onRemoveFriend?.(friendId)
+            if (ok) closeFriendPopover()
+            return ok
+          }}
+          onBlock={onBlockFriend}
+        />
+      ) : null}
     </div>
   )
 }

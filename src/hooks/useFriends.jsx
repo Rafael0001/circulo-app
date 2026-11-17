@@ -1,12 +1,15 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
+import { addBlock, isBlockedPair, readBlocks, removeBlock } from '../lib/blocksStorage'
 import {
   FRIENDS_STORAGE_KEY,
   mapFriendRecord,
   readFriends,
+  removeStoredFriendPair,
   storageKey,
   updateStoredFriendCircle,
+  updateStoredFriendMuted,
   upsertStoredFriend,
   writeFriends,
 } from '../lib/friendsStorage'
@@ -48,7 +51,7 @@ function readCircles(userId) {
 async function loadRemoteFriends(userId) {
   const { data: rows, error } = await supabase
     .from('friendships')
-    .select('friend_id, circle')
+    .select('friend_id, circle, muted')
     .eq('user_id', userId)
 
   if (error) throw error
@@ -59,14 +62,37 @@ async function loadRemoteFriends(userId) {
   const byId = new Map((profiles || []).map((profile) => [profile.id, profile]))
 
   return rows.map((row) =>
-    mapFriendRecord(byId.get(row.friend_id) || { id: row.friend_id, name: 'Amigo' }, row.circle || 'conhecidos'),
+    mapFriendRecord(
+      { ...(byId.get(row.friend_id) || { id: row.friend_id, name: 'Amigo' }), muted: row.muted },
+      row.circle || 'conhecidos',
+    ),
   )
+}
+
+async function loadRemoteBlocks() {
+  const { data: rows, error } = await supabase
+    .from('connection_blocks')
+    .select('blocked_id, blocked_name, blocked_avatar')
+
+  if (error) throw error
+  if (!rows?.length) return []
+
+  const ids = rows.map((row) => row.blocked_id)
+  const { data: profiles } = await supabase.from('profiles').select('id, name, avatar_url').in('id', ids)
+  const byId = new Map((profiles || []).map((profile) => [profile.id, profile]))
+
+  return rows.map((row) => ({
+    id: row.blocked_id,
+    name: byId.get(row.blocked_id)?.name || row.blocked_name || 'Pessoa',
+    avatarUrl: byId.get(row.blocked_id)?.avatar_url || row.blocked_avatar || null,
+  }))
 }
 
 export function FriendsProvider({ children }) {
   const { user } = useAuth()
   const userId = user?.id ?? null
   const [friends, setFriends] = useState([])
+  const [blockedUsers, setBlockedUsers] = useState([])
   const [circles, setCircles] = useState(BASE_CIRCLES)
   const [hydratedFor, setHydratedFor] = useState(null)
 
@@ -76,12 +102,14 @@ export function FriendsProvider({ children }) {
     if (!isSupabaseConfigured) {
       const local = readFriends(userId)
       setFriends(local)
+      setBlockedUsers(readBlocks(userId))
       return local
     }
 
     try {
-      const remote = await loadRemoteFriends(userId)
+      const [remote, blocks] = await Promise.all([loadRemoteFriends(userId), loadRemoteBlocks()])
       setFriends(remote)
+      setBlockedUsers(blocks)
       return remote
     } catch {
       return []
@@ -91,6 +119,7 @@ export function FriendsProvider({ children }) {
   useEffect(() => {
     if (!userId) {
       setFriends([])
+      setBlockedUsers([])
       setCircles(BASE_CIRCLES)
       setHydratedFor(null)
       return undefined
@@ -100,21 +129,24 @@ export function FriendsProvider({ children }) {
 
     if (!isSupabaseConfigured) {
       setFriends(readFriends(userId))
+      setBlockedUsers(readBlocks(userId))
       setHydratedFor(userId)
       return undefined
     }
 
     let cancelled = false
-    loadRemoteFriends(userId)
-      .then((remote) => {
+    Promise.all([loadRemoteFriends(userId), loadRemoteBlocks()])
+      .then(([remote, blocks]) => {
         if (!cancelled) {
           setFriends(remote)
+          setBlockedUsers(blocks)
           setHydratedFor(userId)
         }
       })
       .catch(() => {
         if (!cancelled) {
           setFriends([])
+          setBlockedUsers([])
           setHydratedFor(userId)
         }
       })
@@ -164,6 +196,13 @@ export function FriendsProvider({ children }) {
         .on(
           'postgres_changes',
           { event: '*', schema: 'public', table: 'friendships', filter: `user_id=eq.${userId}` },
+          () => {
+            refreshFriends()
+          },
+        )
+        .on(
+          'postgres_changes',
+          { event: '*', schema: 'public', table: 'connection_blocks', filter: `blocker_id=eq.${userId}` },
           () => {
             refreshFriends()
           },
@@ -233,8 +272,106 @@ export function FriendsProvider({ children }) {
     [userId],
   )
 
+  const setFriendMuted = useCallback(
+    async (friendId, muted) => {
+      if (!userId || !friendId) return false
+
+      let previous = null
+      setFriends((current) => {
+        const target = current.find((friend) => friend.id === friendId)
+        if (!target) return current
+        previous = Boolean(target.muted)
+        const next = current.map((friend) => (friend.id === friendId ? { ...friend, muted: Boolean(muted) } : friend))
+        if (!isSupabaseConfigured) writeFriends(userId, next)
+        return next
+      })
+
+      if (!isSupabaseConfigured) {
+        updateStoredFriendMuted(userId, friendId, muted)
+        return true
+      }
+
+      const { data, error } = await supabase
+        .from('friendships')
+        .update({ muted: Boolean(muted) })
+        .eq('user_id', userId)
+        .eq('friend_id', friendId)
+        .select('friend_id, muted')
+
+      if (error || !data?.length) {
+        setFriends((current) =>
+          current.map((friend) => (friend.id === friendId ? { ...friend, muted: previous } : friend)),
+        )
+        return false
+      }
+
+      return true
+    },
+    [userId],
+  )
+
+  const muteFriend = useCallback((friendId) => setFriendMuted(friendId, true), [setFriendMuted])
+  const unmuteFriend = useCallback((friendId) => setFriendMuted(friendId, false), [setFriendMuted])
+
+  const removeFromCircle = useCallback(
+    async (friendId) => {
+      if (!userId || !friendId) return false
+
+      if (!isSupabaseConfigured) {
+        removeStoredFriendPair(userId, friendId)
+        setFriends((current) => current.filter((friend) => friend.id !== friendId))
+        return true
+      }
+
+      const { error } = await supabase.rpc('remove_from_circle', { target: friendId })
+      if (error) return false
+      setFriends((current) => current.filter((friend) => friend.id !== friendId))
+      return true
+    },
+    [userId],
+  )
+
+  const blockPerson = useCallback(
+    async (person) => {
+      const friendId = person?.id || person
+      if (!userId || !friendId || userId === friendId) return false
+
+      if (!isSupabaseConfigured) {
+        addBlock(userId, typeof person === 'object' ? person : { id: friendId })
+        setBlockedUsers(readBlocks(userId))
+        return true
+      }
+
+      const { error } = await supabase.rpc('block_person', { target: friendId })
+      if (error) return false
+      await refreshFriends()
+      return true
+    },
+    [userId, refreshFriends],
+  )
+
+  const unblockPerson = useCallback(
+    async (friendId) => {
+      if (!userId || !friendId) return false
+
+      if (!isSupabaseConfigured) {
+        removeBlock(userId, friendId)
+        setBlockedUsers(readBlocks(userId))
+        return true
+      }
+
+      const { error } = await supabase.rpc('unblock_person', { target: friendId })
+      if (error) return false
+      setBlockedUsers((current) => current.filter((item) => item.id !== friendId))
+      return true
+    },
+    [userId],
+  )
+
   const addFriend = useCallback(
     (person) => {
+      if (userId && isBlockedPair(userId, person.id)) return null
+
       const nextFriend = mapFriendRecord(
         { ...person, avatar_url: person.avatarUrl || person.avatar_url },
         person.circle ?? outermostId,
@@ -317,9 +454,15 @@ export function FriendsProvider({ children }) {
   const value = useMemo(
     () => ({
       friends,
+      blockedUsers,
       circles,
       maxCircles: MAX_CIRCLES,
       moveFriend,
+      muteFriend,
+      unmuteFriend,
+      removeFromCircle,
+      blockPerson,
+      unblockPerson,
       addFriend,
       addCircle,
       renameCircle,
@@ -327,7 +470,23 @@ export function FriendsProvider({ children }) {
       refreshFriends,
       circleOptions,
     }),
-    [friends, circles, moveFriend, addFriend, addCircle, renameCircle, removeCircle, refreshFriends, circleOptions],
+    [
+      friends,
+      blockedUsers,
+      circles,
+      moveFriend,
+      muteFriend,
+      unmuteFriend,
+      removeFromCircle,
+      blockPerson,
+      unblockPerson,
+      addFriend,
+      addCircle,
+      renameCircle,
+      removeCircle,
+      refreshFriends,
+      circleOptions,
+    ],
   )
 
   return <FriendsContext.Provider value={value}>{children}</FriendsContext.Provider>

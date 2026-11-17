@@ -3,7 +3,9 @@ import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { useFriends } from './useFriends'
 import { readFriends, storageKey } from '../lib/friendsStorage'
+import { isBlockedPair } from '../lib/blocksStorage'
 import { BASE_CIRCLE_IDS, pulsoReachesPlacement } from '../lib/pulsoVisibility'
+import { ingestPulsoAlerts, shouldNotifyAbout } from '../lib/notifications'
 
 const STORAGE_KEY = 'circulo_pulsos'
 const CIRCLES_STORAGE_KEY = 'circulo_circles'
@@ -81,6 +83,8 @@ function loadDemoPulsos(userId, friends) {
   )
 
   const fromFriends = friends.flatMap((friend) => {
+    if (isBlockedPair(userId, friend.id)) return []
+
     const authorCircleIds = readAuthorCircleIds(friend.id)
     const placement = readFriends(friend.id).find((item) => item.id === userId)
 
@@ -116,10 +120,12 @@ async function loadRemotePulsos(userId) {
 
 export function PulsosProvider({ children }) {
   const { user } = useAuth()
-  const { friends } = useFriends()
+  const { friends, blockedUsers } = useFriends()
   const userId = user?.id ?? null
   const friendKey = friends.map((friend) => friend.id).join('|')
+  const blockKey = blockedUsers.map((item) => item.id).sort().join('|')
   const [pulsos, setPulsos] = useState([])
+  const [alerts, setAlerts] = useState([])
   const [hydratedFor, setHydratedFor] = useState(null)
 
   const refreshPulsos = useCallback(async () => {
@@ -128,27 +134,32 @@ export function PulsosProvider({ children }) {
     if (!isSupabaseConfigured) {
       const local = loadDemoPulsos(userId, friends)
       setPulsos(local)
+      setAlerts(ingestPulsoAlerts(userId, local, friends))
       return local
     }
 
     try {
       const remote = await loadRemotePulsos(userId)
       setPulsos(remote)
+      setAlerts(ingestPulsoAlerts(userId, remote, friends))
       return remote
     } catch {
       return []
     }
-  }, [userId, friends, friendKey])
+  }, [userId, friends, friendKey, blockKey])
 
   useEffect(() => {
     if (!userId) {
       setPulsos([])
+      setAlerts([])
       setHydratedFor(null)
       return undefined
     }
 
     if (!isSupabaseConfigured) {
-      setPulsos(loadDemoPulsos(userId, friends))
+      const local = loadDemoPulsos(userId, friends)
+      setPulsos(local)
+      setAlerts(ingestPulsoAlerts(userId, local, friends))
       setHydratedFor(userId)
       return undefined
     }
@@ -158,6 +169,7 @@ export function PulsosProvider({ children }) {
       .then((remote) => {
         if (!cancelled) {
           setPulsos(remote)
+          setAlerts(ingestPulsoAlerts(userId, remote, friends))
           setHydratedFor(userId)
         }
       })
@@ -171,7 +183,7 @@ export function PulsosProvider({ children }) {
     return () => {
       cancelled = true
     }
-  }, [userId, friendKey])
+  }, [userId, friendKey, blockKey])
 
   useEffect(() => {
     if (!userId || hydratedFor !== userId || isSupabaseConfigured) return
@@ -273,9 +285,14 @@ export function PulsosProvider({ children }) {
 
   const createPulso = useCallback(async (newPulso) => criarPulso(newPulso), [criarPulso])
 
+  const visibleAlerts = useMemo(
+    () => alerts.filter((alert) => shouldNotifyAbout(alert.authorId, friends, userId)),
+    [alerts, friends, userId],
+  )
+
   const value = useMemo(
-    () => ({ pulsos, createPulso, criarPulso, refreshPulsos }),
-    [pulsos, createPulso, criarPulso, refreshPulsos],
+    () => ({ pulsos, alerts: visibleAlerts, createPulso, criarPulso, refreshPulsos }),
+    [pulsos, visibleAlerts, createPulso, criarPulso, refreshPulsos],
   )
 
   return <PulsosContext.Provider value={value}>{children}</PulsosContext.Provider>

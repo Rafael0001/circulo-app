@@ -1,8 +1,9 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
-import { isSupabaseConfigured } from '../lib/supabase'
+import { getGoogleAuthEnabled, isSupabaseConfigured } from '../lib/supabase'
 import { useAuth } from '../hooks/useAuth'
 import GoogleSignInButton from '../components/GoogleSignInButton'
+import PasswordField from '../components/PasswordField'
 import { nextFromSearch, rememberAuthNext } from '../lib/authRedirect'
 
 export default function Login() {
@@ -17,6 +18,11 @@ export default function Login() {
   const [error, setError] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [googleBusy, setGoogleBusy] = useState(false)
+  const [googleReady, setGoogleReady] = useState(false)
+
+  useEffect(() => {
+    getGoogleAuthEnabled().then(setGoogleReady)
+  }, [])
 
   const handleSubmit = async (event) => {
     event.preventDefault()
@@ -70,19 +76,11 @@ export default function Login() {
             />
           </label>
 
-          <label className="block text-sm text-[#5a4b3f]">
-            Senha
-            <input
-              type="password"
-              required
-              minLength={6}
-              autoComplete="current-password"
-              value={form.password}
-              onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
-              className="mt-1 w-full rounded-2xl border border-[#eddcc7] bg-[#fffaf4] px-3 py-2.5 outline-none transition focus:border-[#d4a86d]"
-              placeholder="••••••••"
-            />
-          </label>
+          <PasswordField
+            value={form.password}
+            autoComplete="current-password"
+            onChange={(event) => setForm((current) => ({ ...current, password: event.target.value }))}
+          />
 
           {error && <p className="text-sm text-[#a63f35]">{error}</p>}
 
@@ -101,7 +99,12 @@ export default function Login() {
           <span className="h-px flex-1 bg-[#eadfce]" />
         </div>
 
-        <GoogleSignInButton onClick={handleGoogle} disabled={submitting} busy={googleBusy} />
+        <GoogleSignInButton onClick={handleGoogle} disabled={submitting || !googleReady} busy={googleBusy} />
+        {!googleReady ? (
+          <p className="mt-2 text-center text-xs text-[#8d7c6b]">
+            O Google ainda não está ativo neste projeto. Entre com e-mail e senha.
+          </p>
+        ) : null}
 
         <p className="mt-5 text-center text-sm text-[#72655d]">
           Novo por aqui?{' '}

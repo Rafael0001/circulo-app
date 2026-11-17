@@ -3,9 +3,11 @@ import { AuthProvider, useAuth } from './hooks/useAuth'
 import { FriendsProvider } from './hooks/useFriends'
 import { PulsosProvider } from './hooks/usePulsos'
 import { nextFromSearch, safeInvitePath } from './lib/authRedirect'
+import { hasSeenOnboarding, onboardingContinuePath, onboardingEntryPath } from './lib/onboarding'
 import Home from './pages/Home'
 import Login from './pages/Login'
 import Cadastro from './pages/Cadastro'
+import Onboarding from './pages/Onboarding'
 import AuthCallback from './pages/AuthCallback'
 import AdicionarAmigo from './pages/AdicionarAmigo'
 import Convite from './pages/Convite'
@@ -46,13 +48,30 @@ function GuestRoute({ children }) {
   return user ? <Navigate to={next} replace /> : children
 }
 
-export default function App() {
+function AppRoutes() {
+  const { user, loading } = useAuth()
+  const location = useLocation()
+
+  if (loading) {
+    return <LoadingScreen />
+  }
+
+  const onOnboarding = location.pathname === '/onboarding'
+  const onAuthCallback = location.pathname.startsWith('/auth/callback')
+
+  if (user && onOnboarding) {
+    const after = onboardingContinuePath(location.search)
+    return <Navigate to={safeInvitePath(after) || '/'} replace />
+  }
+
+  if (!user && !hasSeenOnboarding() && !onOnboarding && !onAuthCallback) {
+    const next = onboardingEntryPath(location.pathname, location.search)
+    return <Navigate to={`/onboarding?next=${encodeURIComponent(next)}`} replace />
+  }
+
   return (
-    <AuthProvider>
-      <FriendsProvider>
-        <PulsosProvider>
-          <BrowserRouter>
-            <Routes>
+    <Routes>
+              <Route path="/onboarding" element={<Onboarding />} />
               <Route
                 path="/login"
                 element={
@@ -103,8 +122,26 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="/perfil/:userId"
+                element={
+                  <ProtectedRoute>
+                    <Perfil />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="*" element={<Navigate to="/" replace />} />
-            </Routes>
+    </Routes>
+  )
+}
+
+export default function App() {
+  return (
+    <AuthProvider>
+      <FriendsProvider>
+        <PulsosProvider>
+          <BrowserRouter>
+            <AppRoutes />
           </BrowserRouter>
         </PulsosProvider>
       </FriendsProvider>

@@ -1,11 +1,13 @@
 import { useEffect, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
 import { Camera } from 'lucide-react'
 import NavBar from '../components/NavBar'
 import Avatar from '../components/Avatar'
 import { useAuth } from '../hooks/useAuth'
+import { useFriends } from '../hooks/useFriends'
 import { AVATAR_ACCEPT, validateAvatarFile } from '../lib/imageFile'
 import { loadAvatarUrl, removeAvatar, uploadAvatar } from '../lib/avatarStorage'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
 const STORAGE_KEY = 'circulo_profile'
 
@@ -40,7 +42,11 @@ function readProfile(user) {
 
 export default function Perfil() {
   const navigate = useNavigate()
+  const location = useLocation()
+  const { userId: routeUserId } = useParams()
   const { user, signOut, isAdmin } = useAuth()
+  const { friends, blockedUsers, unblockPerson } = useFriends()
+  const isOwn = !routeUserId || routeUserId === user?.id
   const fileInputRef = useRef(null)
   const [profile, setProfile] = useState(() => readProfile(user))
   const [draft, setDraft] = useState(profile)
@@ -53,13 +59,79 @@ export default function Perfil() {
   const [photoBusy, setPhotoBusy] = useState(false)
   const [photoMessage, setPhotoMessage] = useState('')
   const [photoError, setPhotoError] = useState('')
+  const [otherProfile, setOtherProfile] = useState(null)
+  const [otherError, setOtherError] = useState('')
+  const [unblockingId, setUnblockingId] = useState(null)
+
+  useEffect(() => {
+    if (isOwn) {
+      setOtherProfile(null)
+      setOtherError('')
+      return undefined
+    }
+
+    let cancelled = false
+
+    const loadOther = async () => {
+      const friend = friends.find((item) => item.id === routeUserId)
+
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, name, bio, avatar_url, interests')
+          .eq('id', routeUserId)
+          .maybeSingle()
+
+        if (cancelled) return
+        if (error || !data) {
+          setOtherError(friend ? '' : 'Você não tem acesso a este perfil.')
+          setOtherProfile(
+            friend
+              ? { id: friend.id, name: friend.name, bio: '', avatar_url: friend.avatarUrl, interests: [] }
+              : null,
+          )
+          return
+        }
+
+        setOtherError('')
+        setOtherProfile(data)
+        return
+      }
+
+      if (!friend) {
+        setOtherError('Você não tem acesso a este perfil.')
+        setOtherProfile(null)
+        return
+      }
+
+      try {
+        const raw = localStorage.getItem(`${STORAGE_KEY}:${routeUserId}`)
+        const parsed = raw ? JSON.parse(raw) : {}
+        setOtherProfile({
+          id: friend.id,
+          name: parsed.name || friend.name,
+          bio: parsed.bio || '',
+          avatar_url: friend.avatarUrl,
+          interests: Array.isArray(parsed.interests) ? parsed.interests : [],
+        })
+        setOtherError('')
+      } catch {
+        setOtherProfile({ id: friend.id, name: friend.name, bio: '', avatar_url: friend.avatarUrl, interests: [] })
+      }
+    }
+
+    loadOther()
+    return () => {
+      cancelled = true
+    }
+  }, [isOwn, routeUserId, friends, blockedUsers])
 
   useEffect(() => {
     let cancelled = false
     let objectUrl = null
 
     const load = async () => {
-      if (!user?.id) {
+      if (!user?.id || !isOwn) {
         setAvatarUrl(null)
         return
       }
@@ -85,7 +157,59 @@ export default function Perfil() {
       cancelled = true
       if (objectUrl) URL.revokeObjectURL(objectUrl)
     }
-  }, [user?.id])
+  }, [user?.id, isOwn])
+
+  const goBackToMap = () => {
+    navigate(location.state?.from || '/', { replace: true })
+  }
+
+  if (!isOwn) {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-28 pt-6">
+        <header className="mb-5 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[#90795e]">perfil</p>
+            <h1 className="mt-2 text-3xl font-semibold text-[#2e2926]">{otherProfile?.name || 'Pessoa'}</h1>
+          </div>
+          <button
+            type="button"
+            onClick={goBackToMap}
+            className="rounded-full bg-[#f3e6d3] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7f5b3d]"
+          >
+            voltar ao mapa
+          </button>
+        </header>
+
+        {otherError && !otherProfile ? (
+          <p className="rounded-[24px] border border-[#eadfce] bg-white/80 px-4 py-6 text-sm text-[#8d7c6b]">{otherError}</p>
+        ) : otherProfile ? (
+          <div className="rounded-[30px] border border-[#f0e6d8] bg-white/85 p-5">
+            <div className="flex items-center gap-4">
+              <Avatar name={otherProfile.name} src={otherProfile.avatar_url} size={64} />
+              <div>
+                <p className="text-lg font-semibold text-[#2a231f]">{otherProfile.name}</p>
+                {otherError ? <p className="text-sm text-[#8d7c6b]">{otherError}</p> : null}
+              </div>
+            </div>
+            {otherProfile.bio ? <p className="mt-4 text-sm text-[#5a4b3f]">{otherProfile.bio}</p> : null}
+            {Array.isArray(otherProfile.interests) && otherProfile.interests.length ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {otherProfile.interests.map((interest) => (
+                  <span key={interest} className="rounded-full border border-[#eadfce] bg-[#fffaf4] px-2.5 py-1.5 text-xs text-[#5d5149]">
+                    {interest}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className="text-sm text-[#8d7c6b]">Carregando perfil…</p>
+        )}
+
+        <NavBar />
+      </div>
+    )
+  }
 
   const toggleInterest = (interest) => {
     const updated = draft.interests.includes(interest)
@@ -323,6 +447,34 @@ export default function Perfil() {
           </div>
         </div>
       </div>
+
+      {blockedUsers.length ? (
+        <section className="mt-4 rounded-[24px] border border-[#eadfce] bg-white/85 p-4">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#9a8e80]">pessoas bloqueadas</p>
+          <div className="space-y-2">
+            {blockedUsers.map((person) => (
+              <div key={person.id} className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Avatar name={person.name} src={person.avatarUrl} size={36} />
+                  <p className="truncate text-sm text-[#4f4036]">{person.name}</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={unblockingId === person.id}
+                  onClick={async () => {
+                    setUnblockingId(person.id)
+                    await unblockPerson(person.id)
+                    setUnblockingId(null)
+                  }}
+                  className="rounded-full border border-[#eadfce] px-3 py-1.5 text-[11px] font-medium text-[#6b543f] disabled:opacity-60"
+                >
+                  {unblockingId === person.id ? 'Desbloqueando…' : 'Desbloquear'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
 
       <button
         type="button"

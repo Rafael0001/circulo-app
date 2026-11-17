@@ -1,4 +1,5 @@
 import { isSupabaseConfigured, supabase } from './supabase'
+import { isBlockedPair } from './blocksStorage'
 import { mapFriendRecord, readFriends, upsertStoredFriend, writeFriends } from './friendsStorage'
 
 const DEMO_INVITES_KEY = 'circulo_invite_sessions'
@@ -94,6 +95,9 @@ export async function acceptInvite(token, currentUser) {
     const invite = demoLookup(token, currentUserId)
     if (invite.status !== 'ok') return { status: invite.status, error: { message: 'Convite inválido ou expirado.' } }
     if (invite.is_self) return { status: 'self', error: { message: 'Você não pode adicionar a si mesmo.' } }
+    if (isBlockedPair(currentUserId, invite.creator_id)) {
+      return { status: 'blocked', error: { message: 'Não é possível conectar enquanto houver um bloqueio ativo.' } }
+    }
 
     const other = mapFriendRecord({
       id: invite.creator_id,
@@ -144,6 +148,9 @@ export async function acceptInvite(token, currentUser) {
     if (message.includes('expired_invite')) return { status: 'expired', error: { message: 'Este convite expirou.' } }
     if (message.includes('invalid_invite')) return { status: 'invalid', error: { message: 'Convite inválido.' } }
     if (message.includes('not_authenticated')) return { status: 'auth', error: { message: 'Entre para aceitar o convite.' } }
+    if (message.includes('blocked_relationship')) {
+      return { status: 'blocked', error: { message: 'Não é possível conectar enquanto houver um bloqueio ativo.' } }
+    }
     return { status: 'error', error }
   }
 
