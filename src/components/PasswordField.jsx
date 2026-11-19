@@ -23,14 +23,16 @@ export default function PasswordField({
           autoComplete={autoComplete}
           value={value}
           onChange={onChange}
-          className="w-full rounded-2xl border border-[#eddcc7] bg-[#fffaf4] px-3 py-2.5 pr-12 outline-none transition focus:border-[#d4a86d]"
+          spellCheck={false}
+          className="w-full rounded-2xl border border-[#eddcc7] bg-[#fffaf4] px-3 py-2.5 pr-12 outline-none transition focus:border-[#d4a86d] [&::-ms-reveal]:hidden [&::-ms-clear]:hidden"
           placeholder={placeholder}
         />
         <button
           type="button"
           onClick={() => setVisible((current) => !current)}
-          className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full p-1 text-[#8a7464] transition hover:bg-[#f4eadc] hover:text-[#5a4b3f]"
+          className="absolute right-2 top-1/2 z-10 flex h-8 w-8 -translate-y-1/2 items-center justify-center rounded-full text-[#6d5748] transition hover:bg-[#f4eadc] hover:text-[#2a231f]"
           aria-label={visible ? 'Ocultar senha' : 'Mostrar senha'}
+          title={visible ? 'Ocultar senha' : 'Mostrar senha'}
           aria-pressed={visible}
         >
           {visible ? <EyeOff size={18} strokeWidth={1.8} /> : <Eye size={18} strokeWidth={1.8} />}

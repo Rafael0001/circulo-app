@@ -1,4 +1,13 @@
-import { AlertTriangle, Zap } from 'lucide-react'
+import { AlertTriangle, Clock, Pencil, Trash2, Zap } from 'lucide-react'
+import { useState } from 'react'
+import { useAuth } from '../hooks/useAuth'
+import { useFriends } from '../hooks/useFriends'
+import { usePulsos } from '../hooks/usePulsos'
+import { durationLabel } from '../lib/pulsoVisibility'
+import PulsoComments from './PulsoComments'
+import PulsoPhotoGrid from './PulsoPhotoGrid'
+import PulsoPhotoPicker from './PulsoPhotoPicker'
+import PulsoSettings from './PulsoSettings'
 
 const priorityFlags = {
   is_importante: {
@@ -14,7 +23,62 @@ const priorityFlags = {
 }
 
 export default function PulsoCard({ pulso }) {
+  const { user } = useAuth()
+  const { circles } = useFriends()
+  const { editarPulso, excluirPulso } = usePulsos()
+  const isAuthor = Boolean(user?.id && pulso.user_id === user.id)
   const activeFlags = Object.entries(priorityFlags).filter(([key]) => pulso[key])
+  const totalDuration = pulso.duration_hours
+
+  const [editing, setEditing] = useState(false)
+  const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [draft, setDraft] = useState(pulso.content || '')
+  const [draftPhotos, setDraftPhotos] = useState(pulso.photos || [])
+  const [draftHours, setDraftHours] = useState(pulso.duration_hours || 24)
+  const [draftIncludeInner, setDraftIncludeInner] = useState(pulso.include_inner !== false)
+  const [draftCircle, setDraftCircle] = useState(pulso.circle_visibility)
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+
+  const startEdit = () => {
+    setDraft(pulso.content || '')
+    setDraftPhotos(pulso.photos || [])
+    setDraftHours(pulso.duration_hours || 24)
+    setDraftIncludeInner(pulso.include_inner !== false)
+    setDraftCircle(pulso.circle_visibility)
+    setError('')
+    setConfirmingDelete(false)
+    setEditing(true)
+  }
+
+  const handleSave = async () => {
+    setBusy(true)
+    setError('')
+    const { error: saveError } = await editarPulso(pulso.id, {
+      content: draft,
+      photos: draftPhotos,
+      duration_hours: draftHours,
+      include_inner: draftIncludeInner,
+      circle_visibility: draftCircle,
+    })
+    setBusy(false)
+    if (saveError) {
+      setError(saveError.message || 'Não foi possível salvar a edição.')
+      return
+    }
+    setEditing(false)
+  }
+
+  const handleDelete = async () => {
+    setBusy(true)
+    setError('')
+    const { error: deleteError } = await excluirPulso(pulso.id)
+    setBusy(false)
+    if (deleteError) {
+      setError(deleteError.message || 'Não foi possível excluir o pulso.')
+      setConfirmingDelete(false)
+    }
+  }
 
   return (
     <article className="rounded-[24px] border border-[#f0e2d3] bg-white p-4 shadow-sm">
@@ -38,10 +102,126 @@ export default function PulsoCard({ pulso }) {
             )
           })}
         </div>
-        <span className="text-[10px] uppercase tracking-[0.14em] text-[#9a8e80]">{pulso.author}</span>
+        <div className="flex items-center gap-2">
+          {totalDuration ? (
+            <span
+              className="inline-flex items-center gap-0.5 text-[10px] uppercase tracking-[0.08em] text-[#9a8e80]"
+              title={`Duração de ${durationLabel(totalDuration)}`}
+            >
+              <Clock className="h-3 w-3" />
+              {durationLabel(totalDuration)}
+            </span>
+          ) : null}
+          <span className="text-[10px] uppercase tracking-[0.14em] text-[#9a8e80]">{pulso.author}</span>
+          {isAuthor && !editing && (
+            <>
+              <button
+                type="button"
+                onClick={startEdit}
+                className="rounded-full p-1.5 text-[#8a7463] hover:bg-[#f7efe6]"
+                aria-label="Editar pulso"
+              >
+                <Pencil className="h-3.5 w-3.5" />
+              </button>
+              <button
+                type="button"
+                onClick={() => {
+                  setConfirmingDelete(true)
+                  setError('')
+                }}
+                className="rounded-full p-1.5 text-[#8a4a38] hover:bg-[#fff1ed]"
+                aria-label="Excluir pulso"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+              </button>
+            </>
+          )}
+        </div>
       </div>
 
-      <p className="text-[15px] leading-6 text-[#2f2c2a]">{pulso.content}</p>
+      {editing ? (
+        <>
+          <textarea
+            value={draft}
+            onChange={(event) => setDraft(event.target.value)}
+            rows={4}
+            disabled={busy}
+            className="w-full resize-none rounded-2xl border border-[#eddcc7] bg-[#fffaf4] px-3 py-2.5 text-sm outline-none focus:border-[#d4a86d]"
+          />
+          <PulsoSettings
+            formId={pulso.id}
+            compact
+            circles={circles}
+            durationHours={draftHours}
+            includeInner={draftIncludeInner}
+            circleId={draftCircle}
+            onChange={(next) => {
+              if (next.durationHours != null) setDraftHours(next.durationHours)
+              if (next.includeInner != null) setDraftIncludeInner(next.includeInner)
+              if (next.circleId != null) setDraftCircle(next.circleId)
+            }}
+          />
+          <PulsoPhotoPicker
+            photos={draftPhotos}
+            disabled={busy}
+            onChange={setDraftPhotos}
+            onError={(message) => setError(message)}
+          />
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              disabled={busy || (!draft.trim() && draftPhotos.length === 0)}
+              onClick={handleSave}
+              className="flex-1 rounded-full bg-[#2a231f] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white disabled:opacity-50"
+            >
+              {busy ? 'Salvando...' : 'Salvar'}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setEditing(false)}
+              className="flex-1 rounded-full border border-[#eddcc7] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#6d5748]"
+            >
+              Cancelar
+            </button>
+          </div>
+        </>
+      ) : (
+        <>
+          {pulso.content ? <p className="text-[15px] leading-6 text-[#2f2c2a]">{pulso.content}</p> : null}
+          <div className={pulso.content ? 'mt-3' : ''}>
+            <PulsoPhotoGrid photos={pulso.photos} />
+          </div>
+        </>
+      )}
+
+      {confirmingDelete && (
+        <div className="mt-3 rounded-2xl border border-[#f0d4c8] bg-[#fff6f3] p-3">
+          <p className="text-sm text-[#6a4338]">Excluir este pulso? Essa ação não pode ser desfeita.</p>
+          <div className="mt-2 flex gap-2">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={handleDelete}
+              className="flex-1 rounded-full bg-[#7a2f28] px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-white disabled:opacity-50"
+            >
+              {busy ? 'Excluindo...' : 'Excluir'}
+            </button>
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => setConfirmingDelete(false)}
+              className="flex-1 rounded-full border border-[#eddcc7] bg-white px-3 py-2 text-xs font-semibold uppercase tracking-[0.12em] text-[#6d5748]"
+            >
+              Cancelar
+            </button>
+          </div>
+        </div>
+      )}
+
+      {error ? <p className="mt-2 text-sm text-[#b42318]">{error}</p> : null}
+
+      {!editing ? <PulsoComments pulso={pulso} /> : null}
     </article>
   )
 }

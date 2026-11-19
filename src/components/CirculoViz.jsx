@@ -1,7 +1,9 @@
 import { useMemo, useRef, useState } from 'react'
-import { AlertTriangle, Minus, Pencil, Plus, Trash2, Zap } from 'lucide-react'
-import { visibilityHint, visibilityOptionLabel } from '../lib/pulsoVisibility'
+import { AlertTriangle, Clock, Minus, Pencil, Plus, Send, Trash2, Zap } from 'lucide-react'
+import { durationLabel, readPulsoPublishSettings } from '../lib/pulsoVisibility'
 import ConnectionPanel from './ConnectionPanel'
+import PulsoPhotoGrid from './PulsoPhotoGrid'
+import PulsoPhotoPicker from './PulsoPhotoPicker'
 
 const priorityFlags = {
   is_importante: { icon: AlertTriangle, label: 'importante', accent: '#E8C87A', hint: 'marque quando for relevante' },
@@ -66,8 +68,10 @@ export default function CirculoViz({
   const [selectedId, setSelectedId] = useState(null)
   const [showModal, setShowModal] = useState(false)
   const [pulsoFlags, setPulsoFlags] = useState({ is_importante: false, is_urgente: false })
-  const [pulsoVisibility, setPulsoVisibility] = useState(defaultVisibility)
   const [pulsoText, setPulsoText] = useState('')
+  const [pulsoPhotos, setPulsoPhotos] = useState([])
+  const [pulsoError, setPulsoError] = useState('')
+  const [pulsoBusy, setPulsoBusy] = useState(false)
   const [centerHovered, setCenterHovered] = useState(false)
   const [centerBurst, setCenterBurst] = useState(false)
   const [popoverLift, setPopoverLift] = useState(0)
@@ -122,15 +126,14 @@ export default function CirculoViz({
   }, [friends, selected, selectedRing])
 
   const atCircleLimit = circles.length >= maxCircles
-  const visibilityValue = rings.some((ring) => ring.id === pulsoVisibility)
-    ? pulsoVisibility
-    : defaultVisibility
 
   const closeModal = () => {
     setShowModal(false)
     setPulsoText('')
+    setPulsoPhotos([])
+    setPulsoError('')
+    setPulsoBusy(false)
     setPulsoFlags({ is_importante: false, is_urgente: false })
-    setPulsoVisibility(defaultVisibility)
   }
 
   const closeFriendPopover = () => {
@@ -240,16 +243,31 @@ export default function CirculoViz({
   const handleCreate = async () => {
     const content = pulsoText.trim()
 
-    if (!content || typeof onCreatePulso !== 'function') {
+    if ((!content && pulsoPhotos.length === 0) || typeof onCreatePulso !== 'function') {
       return
     }
 
-    await onCreatePulso({
+    setPulsoBusy(true)
+    setPulsoError('')
+    const savedSettings = readPulsoPublishSettings()
+    const savedCircle = rings.some((ring) => ring.id === savedSettings?.circleId)
+      ? savedSettings.circleId
+      : defaultVisibility
+    const { error } = await onCreatePulso({
       is_importante: pulsoFlags.is_importante,
       is_urgente: pulsoFlags.is_urgente,
       content,
-      circle_visibility: visibilityValue,
+      circle_visibility: savedCircle,
+      include_inner: savedSettings?.includeInner !== false,
+      duration_hours: savedSettings?.durationHours ?? 24,
+      photos: pulsoPhotos,
     })
+    setPulsoBusy(false)
+
+    if (error) {
+      setPulsoError(error.message || 'Não foi possível publicar o pulso.')
+      return
+    }
 
     setCenterBurst(true)
     window.setTimeout(() => setCenterBurst(false), 500)
@@ -475,7 +493,16 @@ export default function CirculoViz({
               )}
               <circle cx="300" cy="300" r="34" fill={centerHovered ? '#352D29' : '#2A2420'} opacity="1" />
               <circle cx="300" cy="300" r="34" fill="none" stroke="#E8C87A" strokeWidth="1.5" opacity="0.7" className={centerBurst ? 'center-pulse' : ''} />
-              <text x="300" y="306" textAnchor="middle" fontSize="11" letterSpacing="0.12em" fill="#E8C87A" fontWeight="700">
+              <text
+                x="300"
+                y="300"
+                textAnchor="middle"
+                dominantBaseline="central"
+                fontSize="11"
+                fill="#E8C87A"
+                fontWeight="700"
+                style={{ letterSpacing: '0.04em' }}
+              >
                 pulsar
               </text>
             </g>
@@ -570,11 +597,22 @@ export default function CirculoViz({
                               )
                             })}
                           </div>
-                          <span className="text-[8px] uppercase tracking-[0.1em] text-[#8a7a69]">
+                          <span className="inline-flex items-center gap-1 text-[8px] uppercase tracking-[0.1em] text-[#8a7a69]">
+                            {pulso.duration_hours ? (
+                              <span className="inline-flex items-center gap-0.5" title={`Duração de ${durationLabel(pulso.duration_hours)}`}>
+                                <Clock className="h-2.5 w-2.5" />
+                                {durationLabel(pulso.duration_hours)}
+                              </span>
+                            ) : null}
                             {formatPulsoTimestamp(pulso.created_at)}
                           </span>
                         </div>
-                        <p className="text-[12px] leading-5 text-[#362f2b]">{pulso.content}</p>
+                        {pulso.content ? (
+                          <p className="text-[12px] leading-5 text-[#362f2b]">{pulso.content}</p>
+                        ) : null}
+                        <div className={pulso.content ? 'mt-1.5' : ''}>
+                          <PulsoPhotoGrid photos={pulso.photos} compact />
+                        </div>
                       </div>
                     )
                   })}
@@ -598,44 +636,22 @@ export default function CirculoViz({
 
         {showModal && (
           <div
-            className="absolute inset-0 z-10 flex items-center justify-center rounded-[24px] bg-[#1a1715]/55 px-4 py-10"
+            className="absolute inset-0 z-10 flex items-center justify-center rounded-[24px] bg-[#1a1715]/55 px-5 py-6"
             onClick={closeModal}
           >
             <div
-              className="w-full max-w-[320px] rounded-[16px] border border-[#f0e6d8] bg-white p-4 shadow-[0_18px_38px_rgba(50,40,32,0.18)]"
+              className="w-full max-w-[280px] rounded-[16px] border border-[#f0e6d8] bg-white p-3.5 shadow-[0_18px_38px_rgba(50,40,32,0.18)]"
               onClick={(event) => event.stopPropagation()}
               style={{ animation: 'modalIn 0.22s ease-out' }}
             >
-              <div className="mb-3 flex items-center justify-between">
-                <button type="button" onClick={closeModal} className="text-lg text-[#7b695d]" aria-label="Fechar modal">
+              <div className="mb-2 flex items-center justify-between">
+                <button type="button" onClick={closeModal} className="text-lg leading-none text-[#7b695d]" aria-label="Fechar modal">
                   ×
                 </button>
                 <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#9a8e80]">novo pulso</span>
               </div>
 
-              <div className="mb-3 flex items-center justify-between">
-                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#9a8e80]">novo pulso</span>
-                <div className="flex flex-wrap justify-end gap-1.5">
-                  {Object.entries(priorityFlags)
-                    .filter(([key]) => pulsoFlags[key])
-                    .map(([key, option]) => {
-                      const Icon = option.icon
-                      return (
-                        <span
-                          key={key}
-                          className="inline-flex items-center gap-1 rounded-full px-2 py-1 text-[9px] font-semibold uppercase tracking-[0.12em]"
-                          style={{ background: `${option.accent}22`, color: option.accent }}
-                        >
-                          <Icon className="h-3 w-3" fill="currentColor" strokeWidth={1.5} />
-                          {option.label}
-                        </span>
-                      )
-                    })}
-                </div>
-              </div>
-
-              <p className="mb-3 text-sm font-medium text-[#4f4239]">Selecione as prioridades</p>
-              <div className="grid grid-cols-2 gap-2">
+              <div className="grid grid-cols-2 gap-1.5">
                 {Object.entries(priorityFlags).map(([key, option]) => {
                   const isActive = pulsoFlags[key]
 
@@ -644,53 +660,53 @@ export default function CirculoViz({
                       key={key}
                       type="button"
                       onClick={() => setPulsoFlags((current) => ({ ...current, [key]: !current[key] }))}
-                      className="flex items-center justify-center gap-2 rounded-[14px] border px-3 py-3 text-left transition"
+                      className="flex items-center justify-center gap-1.5 rounded-xl border px-2 py-1.5 transition"
                       style={{
                         borderColor: isActive ? option.accent : '#f0e7de',
                         background: isActive ? `${option.accent}1A` : '#fffaf4',
                         color: isActive ? option.accent : '#5f4c3e',
                       }}
                     >
-                      <span className="flex h-9 w-9 items-center justify-center rounded-full" style={{ background: `${option.accent}22`, color: option.accent }}>
-                        <option.icon className="h-4 w-4" fill={isActive ? 'currentColor' : 'none'} strokeWidth={1.8} />
+                      <span
+                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
+                        style={{ background: `${option.accent}22`, color: option.accent }}
+                      >
+                        <option.icon className="h-3 w-3" fill={isActive ? 'currentColor' : 'none'} strokeWidth={1.8} />
                       </span>
-                      <span className="text-sm font-semibold text-inherit">{option.label}</span>
+                      <span className="text-[9px] font-semibold uppercase tracking-[0.06em] text-inherit">{option.label}</span>
                     </button>
                   )
                 })}
               </div>
 
-              <label className="mt-4 mb-3 block text-sm text-[#5a4b3f]">
-                Visível para
-                <select
-                  value={visibilityValue}
-                  onChange={(event) => setPulsoVisibility(event.target.value)}
-                  className="mt-1 w-full rounded-2xl border border-[#eddcc7] bg-[#fffaf4] px-3 py-2.5 text-sm outline-none transition focus:border-[#d4a86d]"
-                >
-                  {rings.map((ring) => (
-                    <option key={ring.id} value={ring.id}>
-                      {visibilityOptionLabel(circles, ring)}
-                    </option>
-                  ))}
-                </select>
-                <span className="mt-1.5 block text-[11px] text-[#8d7c6b]">{visibilityHint(circles, visibilityValue)}</span>
-              </label>
-
               <textarea
                 value={pulsoText}
                 onChange={(event) => setPulsoText(event.target.value)}
-                rows={5}
+                rows={2}
                 placeholder="Escreva seu pulso..."
-                className="w-full resize-none rounded-[14px] border border-[#f0e7de] bg-[#fffaf4] p-3 text-sm text-[#372f2a] outline-none placeholder:text-[#ad9b8b] focus:border-[#d3b888]"
+                className="mt-3 w-full resize-none rounded-xl border border-[#f0e7de] bg-[#fffaf4] px-2.5 py-2 text-sm text-[#372f2a] outline-none placeholder:text-[#ad9b8b] focus:border-[#d3b888]"
               />
+
+              <PulsoPhotoPicker
+                photos={pulsoPhotos}
+                disabled={pulsoBusy}
+                onChange={(next) => {
+                  setPulsoPhotos(next)
+                  setPulsoError('')
+                }}
+                onError={setPulsoError}
+              />
+
+              {pulsoError ? <p className="mt-2 text-sm text-[#b42318]">{pulsoError}</p> : null}
 
               <button
                 type="button"
                 onClick={handleCreate}
-                disabled={!pulsoText.trim()}
-                className="mt-4 w-full rounded-full bg-[#2A2A2A] px-4 py-3 text-sm font-semibold uppercase tracking-[0.16em] text-[#E8C87A] disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={pulsoBusy || (!pulsoText.trim() && pulsoPhotos.length === 0)}
+                className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-[#2A2A2A] px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-[#E8C87A] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                pulsar
+                <Send className="h-3.5 w-3.5" />
+                {pulsoBusy ? 'enviando...' : 'enviar'}
               </button>
             </div>
           </div>

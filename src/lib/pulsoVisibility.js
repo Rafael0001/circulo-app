@@ -8,8 +8,60 @@ export function circleRank(circleIds, circleId) {
   return fallback >= 0 ? fallback : ids.length
 }
 
-export function pulsoReachesPlacement(visibility, placement, orderedIds = BASE_CIRCLE_IDS) {
+export function pulsoReachesPlacement(visibility, placement, orderedIds = BASE_CIRCLE_IDS, includeInner = true) {
+  if (!includeInner) {
+    return (placement || '') === (visibility || '')
+  }
+
   return circleRank(orderedIds, placement || 'conhecidos') <= circleRank(orderedIds, visibility || 'conhecidos')
+}
+
+export const PULSO_DURATIONS = [12, 24, 48]
+const PULSO_SETTINGS_KEY = 'circulo_pulso_publish_settings'
+
+export function readPulsoPublishSettings() {
+  try {
+    const parsed = JSON.parse(localStorage.getItem(PULSO_SETTINGS_KEY) || 'null')
+    if (!parsed || typeof parsed !== 'object') return null
+    const durationHours = PULSO_DURATIONS.includes(Number(parsed.durationHours))
+      ? Number(parsed.durationHours)
+      : 24
+    return {
+      durationHours,
+      includeInner: parsed.includeInner !== false,
+      circleId: typeof parsed.circleId === 'string' ? parsed.circleId : '',
+    }
+  } catch {
+    return null
+  }
+}
+
+export function writePulsoPublishSettings(settings) {
+  try {
+    localStorage.setItem(
+      PULSO_SETTINGS_KEY,
+      JSON.stringify({
+        durationHours: PULSO_DURATIONS.includes(Number(settings.durationHours))
+          ? Number(settings.durationHours)
+          : 24,
+        includeInner: settings.includeInner !== false,
+        circleId: settings.circleId || '',
+      }),
+    )
+  } catch {
+    // ignore quota / private mode
+  }
+}
+
+export function expiresAtFromDuration(createdAt, durationHours) {
+  if (!durationHours) return null
+  const start = createdAt ? new Date(createdAt).getTime() : Date.now()
+  if (Number.isNaN(start)) return null
+  return new Date(start + durationHours * 60 * 60 * 1000).toISOString()
+}
+
+export function durationLabel(hours) {
+  return `${hours}h`
 }
 
 export function visibilityOptionLabel(circles, circle) {

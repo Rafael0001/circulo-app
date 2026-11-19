@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import QRCode from 'qrcode'
 import { useNavigate } from 'react-router-dom'
-import { Link as LinkIcon, QrCode, ScanLine } from 'lucide-react'
+import { QrCode, ScanLine } from 'lucide-react'
 import NavBar from '../components/NavBar'
 import QrScanner from '../components/QrScanner'
 import { useAuth } from '../hooks/useAuth'
@@ -10,7 +10,6 @@ import { createInvite, formatCountdown, inviteUrl, tokenFromScan } from '../lib/
 const TABS = [
   { id: 'scan', label: 'Escanear', icon: ScanLine },
   { id: 'qr', label: 'Meu QR', icon: QrCode },
-  { id: 'link', label: 'Link', icon: LinkIcon },
 ]
 
 export default function AdicionarAmigo() {
@@ -101,11 +100,6 @@ export default function AdicionarAmigo() {
     handleCopy(link, 'link')
   }
 
-  const handleWhatsApp = () => {
-    if (!link) return
-    window.open(`https://wa.me/?text=${encodeURIComponent(`Entra no meu Círculo: ${link}`)}`, '_blank', 'noopener')
-  }
-
   const handleSaveQr = () => {
     if (!qrImage) return
     const anchor = document.createElement('a')
@@ -132,7 +126,7 @@ export default function AdicionarAmigo() {
         <h1 className="mt-2 text-3xl font-semibold text-[#2e2926]">Adicionar ao meu Círculo</h1>
       </header>
 
-      <div className="mb-4 grid grid-cols-3 gap-2">
+      <div className="mb-4 grid grid-cols-2 gap-3">
         {TABS.map(({ id, label, icon: Icon }) => (
           <button
             key={id}
@@ -142,13 +136,13 @@ export default function AdicionarAmigo() {
               setScanError('')
               setScanning(id === 'scan')
             }}
-            className={`rounded-2xl border px-2 py-3 text-center text-[11px] font-semibold uppercase tracking-[0.08em] ${
+            className={`flex w-full items-center justify-center gap-2 rounded-2xl border px-4 py-3.5 text-center text-xs font-semibold uppercase tracking-[0.1em] ${
               tab === id
                 ? 'border-[#d9b57a] bg-[#f3e7d1] text-[#6a4a2e]'
                 : 'border-[#eadfce] bg-white text-[#7d6d62]'
             }`}
           >
-            <Icon size={16} className="mx-auto mb-1" />
+            <Icon size={18} />
             {label}
           </button>
         ))}
@@ -208,37 +202,6 @@ export default function AdicionarAmigo() {
               className="mt-2 w-full rounded-full border border-[#eadfce] bg-[#fffaf4] px-3 py-2.5 text-sm text-[#6b543f]"
             >
               {copied === 'qr' ? 'Link copiado' : 'Copiar link'}
-            </button>
-          </div>
-        ) : null}
-
-        {tab === 'link' ? (
-          <div className="space-y-3">
-            <p className="text-sm text-[#7d6d62]">Envie este link. Quem abrir entra no fluxo de conexão do Círculo.</p>
-            <div className="break-all rounded-2xl border border-[#f0e2d6] bg-[#fffaf4] px-3 py-3 text-xs text-[#5a4b3f]">
-              {link || 'Gerando link…'}
-            </div>
-            <p className="text-[11px] uppercase tracking-[0.18em] text-[#a37d5a]">expira em {countdown.label}</p>
-            <button
-              type="button"
-              onClick={handleWhatsApp}
-              className="w-full rounded-full bg-[#8f6545] px-4 py-3 text-sm font-medium text-white"
-            >
-              Enviar no WhatsApp
-            </button>
-            <button
-              type="button"
-              onClick={handleShare}
-              className="w-full rounded-full border border-[#eadfce] bg-white px-4 py-3 text-sm text-[#6b543f]"
-            >
-              Compartilhar
-            </button>
-            <button
-              type="button"
-              onClick={() => handleCopy(link, 'link')}
-              className="w-full rounded-full border border-[#eadfce] bg-[#fffaf4] px-4 py-3 text-sm text-[#6b543f]"
-            >
-              {copied === 'link' ? 'Copiado' : 'Copiar link'}
             </button>
           </div>
         ) : null}
