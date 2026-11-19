@@ -26,10 +26,15 @@ export default function PulsoSettings({
       <label className={labelClass}>
         Duração
         <select
-          value={durationHours}
-          onChange={(event) => onChange({ durationHours: Number(event.target.value) })}
+          value={durationHours == null ? '' : durationHours}
+          onChange={(event) =>
+            onChange({
+              durationHours: event.target.value === '' ? null : Number(event.target.value),
+            })
+          }
           className={fieldClass}
         >
+          <option value="">Sem duração definida</option>
           {PULSO_DURATIONS.map((hours) => (
             <option key={hours} value={hours}>
               {durationLabel(hours)}

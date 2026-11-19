@@ -30,7 +30,7 @@ export default function CriarPulso() {
   const savedSettings = useMemo(() => readPulsoPublishSettings(), [])
   const defaultVisibility = circles[circles.length - 1]?.id ?? ''
   const [settings, setSettings] = useState({
-    duration_hours: savedSettings?.durationHours ?? 24,
+    duration_hours: savedSettings ? savedSettings.durationHours : 24,
     include_inner: savedSettings?.includeInner !== false,
     circle_visibility: savedSettings?.circleId || defaultVisibility,
   })
@@ -42,6 +42,7 @@ export default function CriarPulso() {
   const [photos, setPhotos] = useState([])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+  const [settingsSaved, setSettingsSaved] = useState(false)
   const visibilityValue = useMemo(
     () =>
       circles.some((circle) => circle.id === settings.circle_visibility)
@@ -51,19 +52,21 @@ export default function CriarPulso() {
   )
 
   const updateSettings = (next) => {
-    setSettings((current) => {
-      const merged = {
-        duration_hours: next.durationHours ?? current.duration_hours,
-        include_inner: next.includeInner ?? current.include_inner,
-        circle_visibility: next.circleId ?? current.circle_visibility,
-      }
-      writePulsoPublishSettings({
-        durationHours: merged.duration_hours,
-        includeInner: merged.include_inner,
-        circleId: merged.circle_visibility,
-      })
-      return merged
+    setSettingsSaved(false)
+    setSettings((current) => ({
+      duration_hours: next.durationHours !== undefined ? next.durationHours : current.duration_hours,
+      include_inner: next.includeInner !== undefined ? next.includeInner : current.include_inner,
+      circle_visibility: next.circleId ?? current.circle_visibility,
+    }))
+  }
+
+  const handleSaveSettings = () => {
+    writePulsoPublishSettings({
+      durationHours: settings.duration_hours,
+      includeInner: settings.include_inner,
+      circleId: visibilityValue,
     })
+    setSettingsSaved(true)
   }
 
   const toggleFlag = (flagKey) => {
@@ -79,6 +82,11 @@ export default function CriarPulso() {
 
     setBusy(true)
     setError('')
+    writePulsoPublishSettings({
+      durationHours: settings.duration_hours,
+      includeInner: settings.include_inner,
+      circleId: visibilityValue,
+    })
     const { error: createError } = await createPulso({
       is_importante: form.is_importante,
       is_urgente: form.is_urgente,
@@ -119,6 +127,13 @@ export default function CriarPulso() {
             onChange={updateSettings}
           />
         </div>
+        <button
+          type="button"
+          onClick={handleSaveSettings}
+          className="mt-4 w-full rounded-full bg-[#2a231f] px-4 py-3 text-sm font-medium text-white"
+        >
+          {settingsSaved ? 'Salvo' : 'OK'}
+        </button>
       </section>
 
       <form

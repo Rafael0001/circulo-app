@@ -4,7 +4,7 @@ import { useAuth } from './useAuth'
 import { useFriends } from './useFriends'
 import { readFriends, storageKey } from '../lib/friendsStorage'
 import { isBlockedPair } from '../lib/blocksStorage'
-import { BASE_CIRCLE_IDS, expiresAtFromDuration, pulsoReachesPlacement } from '../lib/pulsoVisibility'
+import { BASE_CIRCLE_IDS, expiresAtFromDuration, parsePulsoDuration, pulsoReachesPlacement } from '../lib/pulsoVisibility'
 import { ingestPulsoAlerts, shouldNotifyAbout } from '../lib/notifications'
 import {
   hydrateDemoPhotos,
@@ -343,7 +343,7 @@ export function PulsosProvider({ children }) {
     }) => {
       const text = (content || '').trim()
       const files = (photos || []).filter((item) => item?.file && item?.mime).slice(0, MAX_PULSO_PHOTOS)
-      const hours = [12, 24, 48].includes(Number(duration_hours)) ? Number(duration_hours) : 24
+      const hours = parsePulsoDuration(duration_hours)
       const createdAt = new Date().toISOString()
       const expiresAt = expiresAtFromDuration(createdAt, hours)
 
@@ -464,9 +464,10 @@ export function PulsosProvider({ children }) {
       const nextVisibility = circle_visibility || current.circle_visibility
       const nextIncludeInner =
         include_inner === undefined ? current.include_inner !== false : include_inner !== false
-      const nextHours = [12, 24, 48].includes(Number(duration_hours))
-        ? Number(duration_hours)
-        : current.duration_hours
+      const nextHours =
+        duration_hours === undefined
+          ? current.duration_hours ?? null
+          : parsePulsoDuration(duration_hours, null)
       const nextExpires = expiresAtFromDuration(current.created_at, nextHours)
 
       if (!text && kept.length + files.length === 0) {

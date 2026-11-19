@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { AlertTriangle, Clock, Minus, Pencil, Plus, Send, Trash2, Zap } from 'lucide-react'
-import { durationLabel, readPulsoPublishSettings } from '../lib/pulsoVisibility'
+import { durationLabel, hasDefinedDuration, readPulsoPublishSettings } from '../lib/pulsoVisibility'
 import ConnectionPanel from './ConnectionPanel'
 import PulsoPhotoGrid from './PulsoPhotoGrid'
 import PulsoPhotoPicker from './PulsoPhotoPicker'
@@ -259,7 +259,7 @@ export default function CirculoViz({
       content,
       circle_visibility: savedCircle,
       include_inner: savedSettings?.includeInner !== false,
-      duration_hours: savedSettings?.durationHours ?? 24,
+      duration_hours: savedSettings ? savedSettings.durationHours : 24,
       photos: pulsoPhotos,
     })
     setPulsoBusy(false)
@@ -598,7 +598,7 @@ export default function CirculoViz({
                             })}
                           </div>
                           <span className="inline-flex items-center gap-1 text-[8px] uppercase tracking-[0.1em] text-[#8a7a69]">
-                            {pulso.duration_hours ? (
+                            {hasDefinedDuration(pulso.duration_hours) ? (
                               <span className="inline-flex items-center gap-0.5" title={`Duração de ${durationLabel(pulso.duration_hours)}`}>
                                 <Clock className="h-2.5 w-2.5" />
                                 {durationLabel(pulso.duration_hours)}

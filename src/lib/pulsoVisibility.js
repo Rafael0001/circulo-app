@@ -19,15 +19,21 @@ export function pulsoReachesPlacement(visibility, placement, orderedIds = BASE_C
 export const PULSO_DURATIONS = [12, 24, 48]
 const PULSO_SETTINGS_KEY = 'circulo_pulso_publish_settings'
 
+export function parsePulsoDuration(value, fallback = 24) {
+  if (value === null || value === '' || value === 'none') return null
+  if (value === undefined) return fallback
+  const hours = Number(value)
+  return PULSO_DURATIONS.includes(hours) ? hours : fallback
+}
+
 export function readPulsoPublishSettings() {
   try {
     const parsed = JSON.parse(localStorage.getItem(PULSO_SETTINGS_KEY) || 'null')
     if (!parsed || typeof parsed !== 'object') return null
-    const durationHours = PULSO_DURATIONS.includes(Number(parsed.durationHours))
-      ? Number(parsed.durationHours)
-      : 24
     return {
-      durationHours,
+      durationHours: Object.prototype.hasOwnProperty.call(parsed, 'durationHours')
+        ? parsePulsoDuration(parsed.durationHours, null)
+        : 24,
       includeInner: parsed.includeInner !== false,
       circleId: typeof parsed.circleId === 'string' ? parsed.circleId : '',
     }
@@ -41,9 +47,7 @@ export function writePulsoPublishSettings(settings) {
     localStorage.setItem(
       PULSO_SETTINGS_KEY,
       JSON.stringify({
-        durationHours: PULSO_DURATIONS.includes(Number(settings.durationHours))
-          ? Number(settings.durationHours)
-          : 24,
+        durationHours: parsePulsoDuration(settings.durationHours, null),
         includeInner: settings.includeInner !== false,
         circleId: settings.circleId || '',
       }),
@@ -60,7 +64,12 @@ export function expiresAtFromDuration(createdAt, durationHours) {
   return new Date(start + durationHours * 60 * 60 * 1000).toISOString()
 }
 
+export function hasDefinedDuration(hours) {
+  return PULSO_DURATIONS.includes(Number(hours))
+}
+
 export function durationLabel(hours) {
+  if (!hasDefinedDuration(hours)) return ''
   return `${hours}h`
 }
 

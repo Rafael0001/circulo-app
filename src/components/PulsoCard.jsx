@@ -1,13 +1,11 @@
 import { AlertTriangle, Clock, Pencil, Trash2, Zap } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
-import { useFriends } from '../hooks/useFriends'
 import { usePulsos } from '../hooks/usePulsos'
-import { durationLabel } from '../lib/pulsoVisibility'
+import { durationLabel, hasDefinedDuration } from '../lib/pulsoVisibility'
 import PulsoComments from './PulsoComments'
 import PulsoPhotoGrid from './PulsoPhotoGrid'
 import PulsoPhotoPicker from './PulsoPhotoPicker'
-import PulsoSettings from './PulsoSettings'
 
 const priorityFlags = {
   is_importante: {
@@ -24,28 +22,21 @@ const priorityFlags = {
 
 export default function PulsoCard({ pulso }) {
   const { user } = useAuth()
-  const { circles } = useFriends()
   const { editarPulso, excluirPulso } = usePulsos()
   const isAuthor = Boolean(user?.id && pulso.user_id === user.id)
   const activeFlags = Object.entries(priorityFlags).filter(([key]) => pulso[key])
-  const totalDuration = pulso.duration_hours
+  const totalDuration = hasDefinedDuration(pulso.duration_hours) ? pulso.duration_hours : null
 
   const [editing, setEditing] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
   const [draft, setDraft] = useState(pulso.content || '')
   const [draftPhotos, setDraftPhotos] = useState(pulso.photos || [])
-  const [draftHours, setDraftHours] = useState(pulso.duration_hours || 24)
-  const [draftIncludeInner, setDraftIncludeInner] = useState(pulso.include_inner !== false)
-  const [draftCircle, setDraftCircle] = useState(pulso.circle_visibility)
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
 
   const startEdit = () => {
     setDraft(pulso.content || '')
     setDraftPhotos(pulso.photos || [])
-    setDraftHours(pulso.duration_hours || 24)
-    setDraftIncludeInner(pulso.include_inner !== false)
-    setDraftCircle(pulso.circle_visibility)
     setError('')
     setConfirmingDelete(false)
     setEditing(true)
@@ -57,9 +48,6 @@ export default function PulsoCard({ pulso }) {
     const { error: saveError } = await editarPulso(pulso.id, {
       content: draft,
       photos: draftPhotos,
-      duration_hours: draftHours,
-      include_inner: draftIncludeInner,
-      circle_visibility: draftCircle,
     })
     setBusy(false)
     if (saveError) {
@@ -147,19 +135,6 @@ export default function PulsoCard({ pulso }) {
             rows={4}
             disabled={busy}
             className="w-full resize-none rounded-2xl border border-[#eddcc7] bg-[#fffaf4] px-3 py-2.5 text-sm outline-none focus:border-[#d4a86d]"
-          />
-          <PulsoSettings
-            formId={pulso.id}
-            compact
-            circles={circles}
-            durationHours={draftHours}
-            includeInner={draftIncludeInner}
-            circleId={draftCircle}
-            onChange={(next) => {
-              if (next.durationHours != null) setDraftHours(next.durationHours)
-              if (next.includeInner != null) setDraftIncludeInner(next.includeInner)
-              if (next.circleId != null) setDraftCircle(next.circleId)
-            }}
           />
           <PulsoPhotoPicker
             photos={draftPhotos}
