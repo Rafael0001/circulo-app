@@ -1,33 +1,107 @@
-import { useState } from 'react'
+import { AlertTriangle, Zap } from 'lucide-react'
+import { useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import NavBar from '../components/NavBar'
+import PulsoPhotoPicker from '../components/PulsoPhotoPicker'
+import PulsoSettings from '../components/PulsoSettings'
+import { useFriends } from '../hooks/useFriends'
 import { usePulsos } from '../hooks/usePulsos'
+import { readPulsoPublishSettings, writePulsoPublishSettings } from '../lib/pulsoVisibility'
 
-const categoryOptions = [
-  { value: 'necessidade', label: 'necessidade' },
-  { value: 'vontade', label: 'vontade' },
-  { value: 'sonho', label: 'sonho' },
-  { value: 'projeto', label: 'projeto' },
+const priorityFlags = [
+  {
+    key: 'is_importante',
+    label: 'Importante',
+    color: '#E8C87A',
+    icon: AlertTriangle,
+  },
+  {
+    key: 'is_urgente',
+    label: 'Urgente',
+    color: '#F4956A',
+    icon: Zap,
+  },
 ]
 
 export default function CriarPulso() {
   const navigate = useNavigate()
   const { createPulso } = usePulsos()
-  const [form, setForm] = useState({
-    category: 'necessidade',
-    content: 'Tô precisando de um encontro leve e sem cobrança.',
-    circle_visibility: 'conhecidos',
+  const { circles } = useFriends()
+  const savedSettings = useMemo(() => readPulsoPublishSettings(), [])
+  const defaultVisibility = circles[circles.length - 1]?.id ?? ''
+  const [settings, setSettings] = useState({
+    duration_hours: savedSettings ? savedSettings.durationHours : 24,
+    include_inner: savedSettings?.includeInner !== false,
+    circle_visibility: savedSettings?.circleId || defaultVisibility,
   })
+  const [form, setForm] = useState({
+    is_importante: false,
+    is_urgente: false,
+    content: '',
+  })
+  const [photos, setPhotos] = useState([])
+  const [error, setError] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [settingsSaved, setSettingsSaved] = useState(false)
+  const visibilityValue = useMemo(
+    () =>
+      circles.some((circle) => circle.id === settings.circle_visibility)
+        ? settings.circle_visibility
+        : defaultVisibility,
+    [circles, defaultVisibility, settings.circle_visibility],
+  )
 
-  const handleSubmit = (event) => {
-    event.preventDefault()
-    if (!form.content.trim()) return
+  const updateSettings = (next) => {
+    setSettingsSaved(false)
+    setSettings((current) => ({
+      duration_hours: next.durationHours !== undefined ? next.durationHours : current.duration_hours,
+      include_inner: next.includeInner !== undefined ? next.includeInner : current.include_inner,
+      circle_visibility: next.circleId ?? current.circle_visibility,
+    }))
+  }
 
-    createPulso({
-      category: form.category,
-      content: form.content.trim(),
-      circle_visibility: form.circle_visibility,
+  const handleSaveSettings = () => {
+    writePulsoPublishSettings({
+      durationHours: settings.duration_hours,
+      includeInner: settings.include_inner,
+      circleId: visibilityValue,
     })
+    setSettingsSaved(true)
+  }
+
+  const toggleFlag = (flagKey) => {
+    setForm((current) => ({
+      ...current,
+      [flagKey]: !current[flagKey],
+    }))
+  }
+
+  const handleSubmit = async (event) => {
+    event.preventDefault()
+    if (!form.content.trim() && photos.length === 0) return
+
+    setBusy(true)
+    setError('')
+    writePulsoPublishSettings({
+      durationHours: settings.duration_hours,
+      includeInner: settings.include_inner,
+      circleId: visibilityValue,
+    })
+    const { error: createError } = await createPulso({
+      is_importante: form.is_importante,
+      is_urgente: form.is_urgente,
+      content: form.content.trim(),
+      circle_visibility: visibilityValue,
+      include_inner: settings.include_inner,
+      duration_hours: settings.duration_hours,
+      photos,
+    })
+    setBusy(false)
+
+    if (createError) {
+      setError(createError.message || 'Não foi possível publicar o pulso.')
+      return
+    }
 
     navigate('/')
   }
@@ -35,38 +109,68 @@ export default function CriarPulso() {
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-28 pt-6">
       <header className="mb-5">
-        <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[#90795e]">novo pulso</p>
-        <h1 className="mt-2 text-3xl font-semibold text-[#2e2926]">Criar pulso</h1>
+        <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[#90795e]">pulso</p>
+        <h1 className="mt-2 text-3xl font-semibold text-[#2e2926]">Pulso</h1>
       </header>
 
-      <form onSubmit={handleSubmit} className="rounded-[30px] border border-[#f0e6d8] bg-white/85 p-5 shadow-[0_14px_36px_rgba(166,139,107,0.08)]">
-        <label className="block text-sm text-[#5a4b3f]">
-          Categoria
-          <select
-            value={form.category}
-            onChange={(event) => setForm((current) => ({ ...current, category: event.target.value }))}
-            className="mt-1 w-full rounded-2xl border border-[#eddcc7] bg-[#fffaf4] px-3 py-2.5 outline-none transition focus:border-[#d4a86d]"
-          >
-            {categoryOptions.map((category) => (
-              <option key={category.value} value={category.value}>
-                {category.label}
-              </option>
-            ))}
-          </select>
-        </label>
+      <section className="rounded-[30px] border border-[#f0e6d8] bg-white/85 p-5 shadow-[0_14px_36px_rgba(166,139,107,0.08)]">
+        <h2 className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#90795e]">
+          configurações do pulso
+        </h2>
+        <div className="mt-4">
+          <PulsoSettings
+            showLegend={false}
+            circles={circles}
+            durationHours={settings.duration_hours}
+            includeInner={settings.include_inner}
+            circleId={visibilityValue}
+            onChange={updateSettings}
+          />
+        </div>
+        <button
+          type="button"
+          onClick={handleSaveSettings}
+          className="mt-4 w-full rounded-full bg-[#2a231f] px-4 py-3 text-sm font-medium text-white"
+        >
+          {settingsSaved ? 'Salvo' : 'OK'}
+        </button>
+      </section>
 
-        <label className="mt-4 block text-sm text-[#5a4b3f]">
-          Visível para
-          <select
-            value={form.circle_visibility}
-            onChange={(event) => setForm((current) => ({ ...current, circle_visibility: event.target.value }))}
-            className="mt-1 w-full rounded-2xl border border-[#eddcc7] bg-[#fffaf4] px-3 py-2.5 outline-none transition focus:border-[#d4a86d]"
-          >
-            <option value="intimos">íntimos</option>
-            <option value="amigos">amigos</option>
-            <option value="conhecidos">conhecidos</option>
-          </select>
-        </label>
+      <form
+        onSubmit={handleSubmit}
+        className="mt-4 rounded-[30px] border border-[#f0e6d8] bg-white/85 p-5 shadow-[0_14px_36px_rgba(166,139,107,0.08)]"
+      >
+        <h2 className="mb-4 text-[10px] font-semibold uppercase tracking-[0.2em] text-[#90795e]">
+          criar pulso
+        </h2>
+
+        <div className="grid grid-cols-2 gap-3">
+          {priorityFlags.map((flag) => {
+            const Icon = flag.icon
+            const isActive = form[flag.key]
+
+            return (
+              <button
+                key={flag.key}
+                type="button"
+                onClick={() => toggleFlag(flag.key)}
+                className="flex items-center justify-center gap-2 rounded-2xl border px-3 py-3 text-sm font-medium transition"
+                style={{
+                  borderColor: isActive ? flag.color : '#eddcc7',
+                  background: isActive ? `${flag.color}1A` : '#fffaf4',
+                  color: isActive ? flag.color : '#6d5748',
+                }}
+              >
+                <Icon
+                  className="h-4 w-4"
+                  fill={isActive ? 'currentColor' : 'none'}
+                  strokeWidth={1.8}
+                />
+                {flag.label}
+              </button>
+            )
+          })}
+        </div>
 
         <label className="mt-4 block text-sm text-[#5a4b3f]">
           Mensagem
@@ -79,12 +183,24 @@ export default function CriarPulso() {
           />
         </label>
 
+        <PulsoPhotoPicker
+          photos={photos}
+          disabled={busy}
+          onChange={(next) => {
+            setPhotos(next)
+            setError('')
+          }}
+          onError={setError}
+        />
+
+        {error ? <p className="mt-3 text-sm text-[#b42318]">{error}</p> : null}
+
         <button
           type="submit"
-          disabled={!form.content.trim()}
+          disabled={busy || (!form.content.trim() && photos.length === 0)}
           className="mt-5 w-full rounded-full bg-[#2a231f] px-4 py-3 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-50"
         >
-          Publicar pulso
+          {busy ? 'Publicando...' : 'Publicar pulso'}
         </button>
       </form>
 

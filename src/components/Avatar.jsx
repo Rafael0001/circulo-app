@@ -1,16 +1,44 @@
-export default function Avatar({ name, initials, size = 52, color = '#F7D7B3', className = '' }) {
+import { useEffect, useState } from 'react'
+import { initialsFromName } from '../lib/imageFile'
+
+export default function Avatar({
+  name,
+  src,
+  initials,
+  size = 64,
+  color = '#f4d9b5',
+  className = '',
+  alt,
+}) {
+  const [failed, setFailed] = useState(false)
+
+  useEffect(() => {
+    setFailed(false)
+  }, [src])
+  const label = initials || initialsFromName(name)
+  const showImage = Boolean(src) && !failed
+
   return (
     <div
-      className={['flex items-center justify-center rounded-full font-semibold text-slate-700 shadow-sm ring-2 ring-white', className].join(' ')}
-      style={{
-        width: size,
-        height: size,
-        background: `linear-gradient(135deg, ${color}, #fffdf9)`,
-        fontSize: Math.max(12, size * 0.38),
-      }}
+      className={['relative overflow-hidden rounded-full', className].join(' ')}
+      style={{ width: size, height: size, backgroundColor: color }}
       title={name}
     >
-      {initials}
+      {showImage ? (
+        <img
+          src={src}
+          alt={alt || name || 'Foto de perfil'}
+          className="h-full w-full object-cover"
+          onError={() => setFailed(true)}
+        />
+      ) : (
+        <span
+          className="flex h-full w-full items-center justify-center font-semibold text-[#40382f]"
+          style={{ fontSize: Math.max(12, size * 0.32) }}
+        >
+          {label}
+        </span>
+      )}
     </div>
   )
 }
