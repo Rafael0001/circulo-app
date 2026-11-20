@@ -1,4 +1,4 @@
-import { ImagePlus, X } from 'lucide-react'
+import { Camera, Images, X } from 'lucide-react'
 import { useRef } from 'react'
 import {
   MAX_PULSO_PHOTOS,
@@ -6,8 +6,12 @@ import {
   validatePulsoPhotoFile,
 } from '../lib/pulsoPhotos'
 
+const actionButtonClass =
+  'inline-flex items-center gap-1.5 rounded-full border border-[#eddcc7] bg-[#fffaf4] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#6d5748] disabled:cursor-not-allowed disabled:opacity-50'
+
 export default function PulsoPhotoPicker({ photos = [], onChange, onError, disabled = false }) {
-  const inputRef = useRef(null)
+  const cameraInputRef = useRef(null)
+  const galleryInputRef = useRef(null)
   const remaining = MAX_PULSO_PHOTOS - photos.length
 
   const emit = (next) => {
@@ -83,8 +87,22 @@ export default function PulsoPhotoPicker({ photos = [], onChange, onError, disab
 
       {remaining > 0 && (
         <>
+          {/* Camera: capture opens the device camera on mobile; falls back to file picker on desktop. */}
           <input
-            ref={inputRef}
+            ref={cameraInputRef}
+            type="file"
+            accept={PULSO_PHOTO_ACCEPT}
+            capture="environment"
+            className="hidden"
+            disabled={disabled}
+            onChange={(event) => {
+              handleFiles(event.target.files)
+              event.target.value = ''
+            }}
+          />
+          {/* Gallery: no capture — photo library on mobile, file picker on desktop. */}
+          <input
+            ref={galleryInputRef}
             type="file"
             accept={PULSO_PHOTO_ACCEPT}
             multiple
@@ -95,18 +113,26 @@ export default function PulsoPhotoPicker({ photos = [], onChange, onError, disab
               event.target.value = ''
             }}
           />
-          <button
-            type="button"
-            disabled={disabled}
-            onClick={() => inputRef.current?.click()}
-            className="inline-flex items-center gap-1.5 rounded-full border border-[#eddcc7] bg-[#fffaf4] px-2.5 py-1.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-[#6d5748]"
-          >
-            <ImagePlus className="h-3.5 w-3.5" />
-            Adicionar fotos
-          </button>
-          <p className="mt-1.5 text-[11px] text-[#8d7c6b]">
-            Até {MAX_PULSO_PHOTOS} fotos JPG, PNG ou WebP, 2 MB cada.
-          </p>
+          <div className="flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => cameraInputRef.current?.click()}
+              className={actionButtonClass}
+            >
+              <Camera className="h-3.5 w-3.5" />
+              Abrir câmera
+            </button>
+            <button
+              type="button"
+              disabled={disabled}
+              onClick={() => galleryInputRef.current?.click()}
+              className={actionButtonClass}
+            >
+              <Images className="h-3.5 w-3.5" />
+              Galeria
+            </button>
+          </div>
         </>
       )}
     </div>

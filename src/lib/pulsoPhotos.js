@@ -1,16 +1,30 @@
 import { isSupabaseConfigured, supabase } from './supabase'
-import { AVATAR_ACCEPT, AVATAR_MAX_BYTES, extensionForMime, validateAvatarFile } from './imageFile'
+import { AVATAR_MIME_TYPES, extensionForMime, sniffImageMime } from './imageFile'
 
 export const MAX_PULSO_PHOTOS = 4
-export const PULSO_PHOTO_ACCEPT = AVATAR_ACCEPT
-export const PULSO_PHOTO_MAX_BYTES = AVATAR_MAX_BYTES
+/** Gallery / camera file inputs — broad accept; MIME is re-checked by sniffing. */
+export const PULSO_PHOTO_ACCEPT = 'image/*'
+export const PULSO_PHOTO_MAX_BYTES = 5 * 1024 * 1024
 
 const BUCKET = 'pulso-photos'
 const DEMO_DB = 'circulo_pulso_photos'
 const DEMO_STORE = 'files'
 
-export function validatePulsoPhotoFile(file) {
-  return validateAvatarFile(file)
+export async function validatePulsoPhotoFile(file) {
+  if (!file) {
+    return { error: 'Escolha uma imagem.' }
+  }
+
+  if (file.size > PULSO_PHOTO_MAX_BYTES) {
+    return { error: 'A imagem precisa ter no máximo 5 MB.' }
+  }
+
+  const sniffed = await sniffImageMime(file)
+  if (!sniffed || !AVATAR_MIME_TYPES.includes(sniffed)) {
+    return { error: 'Use uma imagem JPG, PNG ou WebP.' }
+  }
+
+  return { mime: sniffed, error: null }
 }
 
 function openDemoDb() {
@@ -99,6 +113,12 @@ export async function uploadPulsoPhotos({ userId, pulsoId, files, startOrder = 0
 
   if (!files?.length) {
     return { photos: [], error: null }
+  }
+
+  for (const item of files) {
+    if (!item?.file || item.file.size > PULSO_PHOTO_MAX_BYTES) {
+      return { photos: [], error: { message: 'A imagem precisa ter no máximo 5 MB.' } }
+    }
   }
 
   if (isSupabaseConfigured && supabase) {
