@@ -51,10 +51,10 @@ export default function PulsoAudiencePreview({
                     boxShadow: active ? `0 0 0 2px #fff, 0 0 0 3px ${circle.color}` : undefined,
                   }}
                 >
-                  {circle.label.slice(0, 1)}
+                  {(circle.label || '?').slice(0, 1)}
                 </span>
                 <span className="max-w-full truncate text-[9px] font-medium text-[#6d5748]">
-                  {circle.label}
+                  {circle.label || 'círculo'}
                 </span>
               </button>
             )
@@ -89,7 +89,7 @@ export default function PulsoAudiencePreview({
                   cursor: interactive ? 'pointer' : 'default',
                 }}
               >
-                {circle.label.slice(0, 1)}
+                {(circle.label || '?').slice(0, 1)}
               </button>
             </div>
           )
