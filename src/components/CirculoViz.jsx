@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, Bell, Clock, Minus, Pencil, Plus, Send, Settings, Trash2, Zap } from 'lucide-react'
+import { AlertTriangle, Bell, Clock, Minus, Pencil, Plus, Send, Settings, Trash2, X, Zap } from 'lucide-react'
 import { isDefaultCircle } from '../lib/circles'
 import {
   angleFromPoint,
@@ -27,6 +27,13 @@ const priorityFlags = {
   is_importante: { icon: AlertTriangle, label: 'importante', accent: '#E8C87A', hint: 'marque quando for relevante' },
   is_urgente: { icon: Zap, label: 'urgente', accent: '#F4956A', hint: 'marque quando precisar agora' },
 }
+
+const composerPriorityFlags = {
+  is_importante: { icon: AlertTriangle, label: 'Importante', accent: '#f15a22' },
+  is_urgente: { icon: Zap, label: 'Urgente', accent: '#f15a22' },
+}
+
+const PULSO_TEXT_MAX = 1000
 
 const MIN_ZOOM = 0.7
 const MAX_ZOOM = 2.2
@@ -841,58 +848,94 @@ export default function CirculoViz({
 
         {showModal && (
           <div
-            className="absolute inset-0 z-10 flex items-center justify-center rounded-[24px] bg-[#1a1715]/55 px-5 py-6"
+            className="absolute inset-0 z-10 flex items-center justify-center overflow-y-auto rounded-[24px] bg-[#1a1715]/55 px-2.5 py-2"
             onClick={closeModal}
           >
             <div
-              className="w-full max-w-[280px] rounded-[16px] border border-[#f0e6d8] bg-white p-3.5 shadow-[0_18px_38px_rgba(50,40,32,0.18)]"
+              className="relative my-auto w-full max-w-[270px] max-h-[min(100%,420px)] overflow-hidden rounded-[22px] border border-[#e8ddd0] bg-[#fff8f0] p-3 shadow-[0_18px_38px_rgba(50,40,32,0.2)]"
               onClick={(event) => event.stopPropagation()}
               style={{ animation: 'modalIn 0.22s ease-out' }}
             >
-              <div className="mb-2 flex items-center justify-between">
-                <button type="button" onClick={closeModal} className="text-lg leading-none text-[#7b695d]" aria-label="Fechar modal">
-                  ×
-                </button>
-                <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#9a8e80]">novo pulso</span>
+              {/* Detalhe orgânico — canto superior esquerdo */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute left-0 top-0 h-7 w-7 overflow-hidden rounded-tl-[22px]"
+              >
+                <div className="absolute -left-2 -top-2.5 h-8 w-8 rounded-full bg-[#7ec9bb]/40" />
               </div>
 
-              <div className="grid grid-cols-2 gap-1.5">
-                {Object.entries(priorityFlags).map(([key, option]) => {
+              {/* Detalhe orgânico — canto inferior direito */}
+              <div
+                aria-hidden="true"
+                className="pointer-events-none absolute bottom-0 right-0 h-8 w-8 overflow-hidden rounded-br-[22px]"
+              >
+                <div className="absolute -bottom-2.5 -right-2.5 h-9 w-9 rounded-full bg-[#f15a22]/35" />
+              </div>
+
+              <div className="relative mb-2.5 flex items-center justify-between">
+                <button
+                  type="button"
+                  onClick={closeModal}
+                  className="flex h-7 w-7 items-center justify-center rounded-full text-[#5c534c] hover:bg-[#f3ebe2]"
+                  aria-label="Fechar modal"
+                >
+                  <X className="h-4 w-4" strokeWidth={2.25} />
+                </button>
+                <p className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#3a342f]">
+                  Novo{' '}
+                  <span className="relative inline-block">
+                    Pulso
+                    <span className="absolute inset-x-0 -bottom-0.5 h-[2px] rounded-full bg-[#f15a22]" />
+                  </span>
+                </p>
+              </div>
+
+              <div className="relative grid grid-cols-2 gap-1.5">
+                {Object.entries(composerPriorityFlags).map(([key, option]) => {
                   const isActive = pulsoFlags[key]
+                  const Icon = option.icon
 
                   return (
                     <button
                       key={key}
                       type="button"
                       onClick={() => setPulsoFlags((current) => ({ ...current, [key]: !current[key] }))}
-                      className="flex items-center justify-center gap-1.5 rounded-xl border px-2 py-1.5 transition"
+                      className="flex items-center justify-center gap-1.5 rounded-2xl border px-2 py-2 transition"
                       style={{
-                        borderColor: isActive ? option.accent : '#f0e7de',
-                        background: isActive ? `${option.accent}1A` : '#fffaf4',
-                        color: isActive ? option.accent : '#5f4c3e',
+                        borderColor: isActive ? option.accent : '#e5d9cc',
+                        background: isActive ? '#fff1e8' : '#fffcf8',
+                        color: isActive ? option.accent : '#8a8178',
                       }}
                     >
-                      <span
-                        className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full"
-                        style={{ background: `${option.accent}22`, color: option.accent }}
-                      >
-                        <option.icon className="h-3 w-3" fill={isActive ? 'currentColor' : 'none'} strokeWidth={1.8} />
+                      <Icon
+                        className="h-3.5 w-3.5"
+                        fill={isActive ? 'currentColor' : 'none'}
+                        strokeWidth={1.8}
+                      />
+                      <span className="text-[11px] font-semibold tracking-[-0.01em] text-inherit">
+                        {option.label}
                       </span>
-                      <span className="text-[9px] font-semibold uppercase tracking-[0.06em] text-inherit">{option.label}</span>
                     </button>
                   )
                 })}
               </div>
 
-              <textarea
-                value={pulsoText}
-                onChange={(event) => setPulsoText(event.target.value)}
-                rows={2}
-                placeholder="Escreva seu pulso..."
-                className="mt-3 w-full resize-none rounded-xl border border-[#f0e7de] bg-[#fffaf4] px-2.5 py-2 text-sm text-[#372f2a] outline-none placeholder:text-[#ad9b8b] focus:border-[#d3b888]"
-              />
+              <div className="relative mt-2">
+                <textarea
+                  value={pulsoText}
+                  onChange={(event) => setPulsoText(event.target.value.slice(0, PULSO_TEXT_MAX))}
+                  rows={2}
+                  maxLength={PULSO_TEXT_MAX}
+                  placeholder="Escreva seu pulso..."
+                  className="w-full resize-none rounded-2xl border border-[#e8ddd0] bg-[#fffcf8] px-2.5 py-2 pb-6 text-sm leading-5 text-[#2f2c2a] outline-none placeholder:text-[#b0a396] focus:border-[#f0b089]"
+                />
+                <span className="pointer-events-none absolute bottom-1.5 right-2.5 text-[10px] tabular-nums text-[#b0a396]">
+                  {pulsoText.length}/{PULSO_TEXT_MAX}
+                </span>
+              </div>
 
               <PulsoPhotoPicker
+                variant="camera"
                 photos={pulsoPhotos}
                 disabled={pulsoBusy}
                 onChange={(next) => {
@@ -902,9 +945,10 @@ export default function CirculoViz({
                 onError={setPulsoError}
               />
 
-              {pulsoError ? <p className="mt-2 text-sm text-[#b42318]">{pulsoError}</p> : null}
+              {pulsoError ? <p className="mt-1.5 text-xs text-[#b42318]">{pulsoError}</p> : null}
 
               <PulsoAudiencePreview
+                variant="composer"
                 circles={rings}
                 circleId={pulsoAudience.circleId}
                 includeInner={pulsoAudience.includeInner}
@@ -915,10 +959,10 @@ export default function CirculoViz({
                 type="button"
                 onClick={handleCreate}
                 disabled={pulsoBusy || (!pulsoText.trim() && pulsoPhotos.length === 0)}
-                className="mt-3 flex w-full items-center justify-center gap-2 rounded-full bg-[#2A2A2A] px-4 py-2.5 text-xs font-semibold uppercase tracking-[0.14em] text-[#E8C87A] disabled:cursor-not-allowed disabled:opacity-50"
+                className="relative z-10 mx-auto mt-2.5 flex w-[88%] items-center justify-center gap-1.5 rounded-full bg-[#f15a22] px-3 py-1.5 text-[12px] font-semibold text-white shadow-[0_4px_10px_rgba(241,90,34,0.2)] disabled:cursor-not-allowed disabled:opacity-50"
               >
-                <Send className="h-3.5 w-3.5" />
-                {pulsoBusy ? 'enviando...' : 'enviar'}
+                <Send className="h-3 w-3" strokeWidth={2} />
+                {pulsoBusy ? 'Enviando...' : 'Enviar'}
               </button>
             </div>
           </div>
