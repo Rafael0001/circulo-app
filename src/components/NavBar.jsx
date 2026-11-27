@@ -10,7 +10,7 @@ const navItems = [
 
 export default function NavBar() {
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto flex w-full max-w-md items-center justify-around border-t border-[#eadbcb] bg-[#fffaf4]/90 px-3 py-3 backdrop-blur-sm">
+    <nav className="safe-x fixed inset-x-0 bottom-0 z-40 mx-auto flex w-full max-w-md items-center justify-around border-t border-[#eadbcb] bg-[#fffaf4]/90 px-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm">
       {navItems.map(({ label, to, icon: Icon }) => (
         <NavLink
           key={to}
