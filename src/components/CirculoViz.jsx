@@ -6,13 +6,6 @@ const circleMeta = {
   conhecidos: { radius: 268, color: '#ad9ae9', label: 'conhecidos' },
 }
 
-const categoryOptions = {
-  necessidade: { icon: '🤝', label: 'necessidade', accent: '#F4956A', hint: 'ex: preciso de carona hoje' },
-  vontade: { icon: '✨', label: 'vontade', accent: '#4DC68B', hint: 'ex: querendo viajar pra Bahia' },
-  sonho: { icon: '🌙', label: 'sonho', accent: '#8B8FF8', hint: 'ex: abrir uma cafeteria' },
-  projeto: { icon: '🚀', label: 'projeto', accent: '#F0BA3A', hint: 'ex: lançando meu podcast' },
-}
-
 const angleByCircle = {
   intimos: [300, 60, 180],
   amigos: [35, 120, 220, 315],
@@ -30,8 +23,6 @@ function polarToCartesian(angle, radius) {
 export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePulso }) {
   const [selectedId, setSelectedId] = useState(null)
   const [showModal, setShowModal] = useState(false)
-  const [pulsoStep, setPulsoStep] = useState(1)
-  const [pulsoCategory, setPulsoCategory] = useState('necessidade')
   const [pulsoText, setPulsoText] = useState('')
   const [centerHovered, setCenterHovered] = useState(false)
   const [centerBurst, setCenterBurst] = useState(false)
@@ -78,9 +69,7 @@ export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePuls
 
   const closeModal = () => {
     setShowModal(false)
-    setPulsoStep(1)
     setPulsoText('')
-    setPulsoCategory('necessidade')
   }
 
   const closeFriendPopover = () => {
@@ -147,8 +136,9 @@ export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePuls
       return
     }
 
+    // Category field kept for API compatibility; no category UI on Home.
     await onCreatePulso({
-      category: pulsoCategory,
+      category: 'necessidade',
       content,
       circle_visibility: 'amigos',
     })
@@ -283,17 +273,50 @@ export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePuls
             onMouseEnter={() => setCenterHovered(true)}
             onMouseLeave={() => setCenterHovered(false)}
             className="cursor-pointer"
+            role="button"
+            aria-label="Pulsar"
           >
             {centerBurst && (
               <>
-                <circle cx="300" cy="300" r="36" fill="none" stroke="#E8C87A" strokeWidth="1.5" opacity="0.75" className="center-pulse" />
-                <circle cx="300" cy="300" r="36" fill="none" stroke="#E8C87A" strokeWidth="1.1" opacity="0.42" className="center-pulse center-pulse-delayed" />
+                <circle cx="300" cy="288" r="40" fill="none" stroke="var(--circulo-core, #E4780C)" strokeWidth="1.5" opacity="0.75" className="center-pulse" />
+                <circle cx="300" cy="288" r="40" fill="none" stroke="var(--circulo-core, #E4780C)" strokeWidth="1.1" opacity="0.42" className="center-pulse center-pulse-delayed" />
               </>
             )}
-            <circle cx="300" cy="300" r="34" fill={centerHovered ? '#3A3A3A' : '#2A2A2A'} opacity="1" />
-            <circle cx="300" cy="300" r="34" fill="none" stroke="#E8C87A" strokeWidth="1.5" opacity="0.7" className={centerBurst ? 'center-pulse' : ''} />
-            <text x="300" y="306" textAnchor="middle" fontSize="11" letterSpacing="0.12em" fill="#E8C87A" fontWeight="700">
-              pulsar
+            <circle
+              cx="300"
+              cy="288"
+              r="36"
+              fill={centerHovered ? 'var(--circulo-core-soft, #F3A24A)' : 'var(--circulo-core, #E4780C)'}
+            />
+            <circle
+              cx="292"
+              cy="282"
+              r="3.2"
+              fill="var(--circulo-smile, #FFFFFF)"
+            />
+            <circle
+              cx="308"
+              cy="282"
+              r="3.2"
+              fill="var(--circulo-smile, #FFFFFF)"
+            />
+            <path
+              d="M290 294c3.4 6.4 16.6 6.4 20 0"
+              fill="none"
+              stroke="var(--circulo-smile, #FFFFFF)"
+              strokeWidth="3.2"
+              strokeLinecap="round"
+            />
+            <text
+              x="300"
+              y="348"
+              textAnchor="middle"
+              fontSize="15"
+              fontWeight="700"
+              fill="var(--circulo-pulsar-label, #E4780C)"
+              style={{ fontFamily: 'Fraunces, Georgia, serif' }}
+            >
+              Pulsar
             </text>
           </g>
         </svg>
@@ -339,17 +362,7 @@ export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePuls
                 >
                   {selectedPulsos.map((pulso) => (
                     <div key={pulso.id} className="rounded-[12px] border border-[#f5eee8] bg-[#fffaf4] p-2.5">
-                      <div className="mb-1 flex items-center justify-between gap-2">
-                        <span
-                          className="inline-flex items-center gap-1 rounded-full px-1.5 py-0.5 text-[8px] font-semibold uppercase tracking-[0.12em]"
-                          style={{
-                            background: `${categoryOptions[pulso.category]?.accent ?? '#F4956A'}22`,
-                            color: categoryOptions[pulso.category]?.accent ?? '#F4956A',
-                          }}
-                        >
-                          <span>{categoryOptions[pulso.category]?.icon ?? '✦'}</span>
-                          {pulso.category}
-                        </span>
+                      <div className="mb-1 flex items-center justify-end">
                         <span className="text-[8px] uppercase tracking-[0.1em] text-[#8a7a69]">
                           {formatPulsoTimestamp(pulso.created_at)}
                         </span>
@@ -392,70 +405,22 @@ export default function CirculoViz({ friends, pulsos, onMoveFriend, onCreatePuls
                 <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[#9a8e80]">novo pulso</span>
               </div>
 
-              {pulsoStep === 1 ? (
-                <>
-                  <p className="mb-3 text-sm font-medium text-[#4f4239]">Escolha a categoria</p>
-                  <div className="space-y-2">
-                    {Object.entries(categoryOptions).map(([key, option]) => {
-                      const selected = pulsoCategory === key
+              <textarea
+                value={pulsoText}
+                onChange={(event) => setPulsoText(event.target.value)}
+                rows={6}
+                placeholder="Escreva seu pulso..."
+                className="w-full resize-none rounded-[14px] border border-[#f0e7de] bg-[#fffaf4] p-3 text-sm text-[#372f2a] outline-none placeholder:text-[#ad9b8b] focus:border-core"
+              />
 
-                      return (
-                        <button
-                          key={key}
-                          type="button"
-                          onClick={() => {
-                            setPulsoCategory(key)
-                            setPulsoStep(2)
-                          }}
-                          className="flex w-full items-center gap-3 rounded-[14px] border px-3 py-3 text-left transition"
-                          style={{
-                            borderColor: selected ? option.accent : '#f0e7de',
-                            background: selected ? `${option.accent}1A` : '#fffaf4',
-                          }}
-                        >
-                          <span className="flex h-10 w-10 items-center justify-center rounded-full text-lg" style={{ background: `${option.accent}22`, color: option.accent }}>
-                            {option.icon}
-                          </span>
-                          <span className="flex-1">
-                            <span className="block text-sm font-semibold text-[#302b29]">{option.label}</span>
-                            <span className="block text-[11px] text-[#7b695d]">{option.hint}</span>
-                          </span>
-                        </button>
-                      )
-                    })}
-                  </div>
-                </>
-              ) : (
-                <>
-                  <div className="mb-3 flex items-center justify-between">
-                    <button type="button" onClick={() => setPulsoStep(1)} className="text-sm font-medium text-[#7b695d]">← voltar</button>
-                    <span
-                      className="inline-flex items-center gap-2 rounded-full px-2.5 py-1 text-[10px] font-semibold uppercase tracking-[0.14em]"
-                      style={{ background: `${categoryOptions[pulsoCategory].accent}22`, color: categoryOptions[pulsoCategory].accent }}
-                    >
-                      <span>{categoryOptions[pulsoCategory].icon}</span>
-                      {categoryOptions[pulsoCategory].label}
-                    </span>
-                  </div>
-
-                  <textarea
-                    value={pulsoText}
-                    onChange={(event) => setPulsoText(event.target.value)}
-                    rows={6}
-                    placeholder="Escreva seu pulso..."
-                    className="w-full resize-none rounded-[14px] border border-[#f0e7de] bg-[#fffaf4] p-3 text-sm text-[#372f2a] outline-none placeholder:text-[#ad9b8b] focus:border-[#d3b888]"
-                  />
-
-                  <button
-                    type="button"
-                    onClick={handleCreate}
-                    disabled={!pulsoText.trim()}
-                    className="mt-4 w-full rounded-full bg-[#2A2A2A] px-4 py-3 text-sm font-semibold uppercase tracking-[0.16em] text-[#E8C87A] disabled:cursor-not-allowed disabled:opacity-50"
-                  >
-                    pulsar
-                  </button>
-                </>
-              )}
+              <button
+                type="button"
+                onClick={handleCreate}
+                disabled={!pulsoText.trim()}
+                className="mt-4 w-full rounded-full bg-core px-4 py-3 text-sm font-semibold text-smile transition hover:bg-core-soft disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                Pulsar
+              </button>
             </div>
           </div>
         )}
