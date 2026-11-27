@@ -1,5 +1,10 @@
 import { isSupabaseConfigured, supabase } from './supabase'
-import { AVATAR_ACCEPT, AVATAR_MAX_BYTES, extensionForMime, validateAvatarFile } from './imageFile'
+import {
+  AVATAR_ACCEPT,
+  AVATAR_MAX_BYTES,
+  compressImageForUpload,
+  extensionForMime,
+} from './imageFile'
 
 export const MAX_PULSO_PHOTOS = 4
 export const PULSO_PHOTO_ACCEPT = AVATAR_ACCEPT
@@ -9,8 +14,13 @@ const BUCKET = 'pulso-photos'
 const DEMO_DB = 'circulo_pulso_photos'
 const DEMO_STORE = 'files'
 
-export function validatePulsoPhotoFile(file) {
-  return validateAvatarFile(file)
+/** Valida tipo e comprime a foto (sem limite no tamanho original). */
+export async function validatePulsoPhotoFile(file) {
+  const prepared = await compressImageForUpload(file)
+  if (prepared.error) {
+    return { file: null, mime: null, error: prepared.error }
+  }
+  return { file: prepared.file, mime: prepared.mime, error: null }
 }
 
 function openDemoDb() {

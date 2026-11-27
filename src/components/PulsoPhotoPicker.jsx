@@ -61,16 +61,16 @@ export default function PulsoPhotoPicker({
       if (seen.has(key)) continue
       seen.add(key)
 
-      const { mime, error } = await validatePulsoPhotoFile(file)
-      if (error) {
-        lastError = error
+      const { file: preparedFile, mime, error } = await validatePulsoPhotoFile(file)
+      if (error || !preparedFile || !mime) {
+        lastError = error || 'Não foi possível processar a imagem.'
         continue
       }
 
       next.push({
         id: crypto.randomUUID(),
-        url: URL.createObjectURL(file),
-        file,
+        url: URL.createObjectURL(preparedFile),
+        file: preparedFile,
         mime,
         isNew: true,
         sort_order: next.length,
@@ -220,7 +220,7 @@ export default function PulsoPhotoPicker({
                 Adicionar fotos
               </button>
               <p className="mt-1.5 text-[11px] text-[#8d7c6b]">
-                Até {MAX_PULSO_PHOTOS} fotos JPG, PNG ou WebP, 2 MB cada.
+                Até {MAX_PULSO_PHOTOS} fotos JPG, PNG ou WebP. Elas são otimizadas automaticamente.
               </p>
             </>
           )}
