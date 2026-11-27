@@ -12,6 +12,7 @@ import AuthCallback from './pages/AuthCallback'
 import AdicionarAmigo from './pages/AdicionarAmigo'
 import Convite from './pages/Convite'
 import CriarPulso from './pages/CriarPulso'
+import ConfigurarCirculos from './pages/ConfigurarCirculos'
 import Perfil from './pages/Perfil'
 
 function LoadingScreen() {
@@ -111,6 +112,14 @@ function AppRoutes() {
                 element={
                   <ProtectedRoute>
                     <CriarPulso />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="/configurar-circulos"
+                element={
+                  <ProtectedRoute>
+                    <ConfigurarCirculos />
                   </ProtectedRoute>
                 }
               />

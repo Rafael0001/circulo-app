@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { usePulsos } from '../hooks/usePulsos'
 import { durationLabel, hasDefinedDuration } from '../lib/pulsoVisibility'
+import { absoluteTimeFrom, relativeTimeFrom } from '../lib/relativeTime'
 import PulsoComments from './PulsoComments'
 import PulsoPhotoGrid from './PulsoPhotoGrid'
 import PulsoPhotoPicker from './PulsoPhotoPicker'
@@ -70,14 +71,27 @@ export default function PulsoCard({ pulso }) {
 
   return (
     <article className="rounded-[24px] border border-[#f0e2d3] bg-white p-4 shadow-sm">
-      <div className="mb-3 flex items-center justify-between gap-2">
-        <div className="flex flex-wrap items-center gap-2">
+      <div className="mb-3 flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <p className="flex min-w-0 items-baseline gap-1.5 text-sm">
+            <span className="truncate font-semibold text-[#2f2c2a]">{pulso.author}</span>
+            <span className="text-[#d4c6b6]">·</span>
+            <time
+              className="shrink-0 text-[12px] text-[#9a8e80]"
+              dateTime={pulso.created_at || undefined}
+              title={absoluteTimeFrom(pulso.created_at)}
+            >
+              {relativeTimeFrom(pulso.created_at)}
+            </time>
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1.5">
           {activeFlags.map(([key, flag]) => {
             const Icon = flag.icon
             return (
               <span
                 key={key}
-                className="inline-flex items-center gap-1.5 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                className="inline-flex items-center gap-1 rounded-full border px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
                 style={{
                   borderColor: `${flag.color}66`,
                   background: `${flag.color}1A`,
@@ -89,18 +103,15 @@ export default function PulsoCard({ pulso }) {
               </span>
             )
           })}
-        </div>
-        <div className="flex items-center gap-2">
           {totalDuration ? (
             <span
-              className="inline-flex items-center gap-0.5 text-[10px] uppercase tracking-[0.08em] text-[#9a8e80]"
+              className="inline-flex items-center gap-0.5 text-[10px] text-[#9a8e80]"
               title={`Duração de ${durationLabel(totalDuration)}`}
             >
               <Clock className="h-3 w-3" />
               {durationLabel(totalDuration)}
             </span>
           ) : null}
-          <span className="text-[10px] uppercase tracking-[0.14em] text-[#9a8e80]">{pulso.author}</span>
           {isAuthor && !editing && (
             <>
               <button

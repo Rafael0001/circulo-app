@@ -1,7 +1,14 @@
-import { createContext, useCallback, useContext, useEffect, useMemo, useState } from 'react'
+import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react'
 import { isSupabaseConfigured, supabase } from '../lib/supabase'
 import { useAuth } from './useAuth'
 import { addBlock, isBlockedPair, readBlocks, removeBlock } from '../lib/blocksStorage'
+import {
+  BASE_CIRCLES,
+  CIRCLE_COLORS,
+  MAX_CIRCLES,
+  isDefaultCircle,
+  normalizeCircles,
+} from '../lib/circles'
 import {
   FRIENDS_STORAGE_KEY,
   mapFriendRecord,
@@ -15,15 +22,6 @@ import {
 } from '../lib/friendsStorage'
 
 const CIRCLES_STORAGE_KEY = 'circulo_circles'
-const MAX_CIRCLES = 5
-
-const BASE_CIRCLES = [
-  { id: 'intimos', label: 'íntimos', color: '#f0c575' },
-  { id: 'amigos', label: 'amigos', color: '#7ccdc2' },
-  { id: 'conhecidos', label: 'conhecidos', color: '#ad9ae9' },
-]
-
-const CIRCLE_COLORS = ['#f0c575', '#7ccdc2', '#ad9ae9', '#f0a3c2', '#8ec5e8']
 
 const FriendsContext = createContext(null)
 
@@ -33,26 +31,79 @@ function readCircles(userId) {
   try {
     const raw = localStorage.getItem(storageKey(CIRCLES_STORAGE_KEY, userId))
     if (!raw) return BASE_CIRCLES
-    const parsed = JSON.parse(raw)
-    if (!Array.isArray(parsed) || parsed.length === 0) return BASE_CIRCLES
-    return parsed
-      .filter((circle) => circle && typeof circle.id === 'string')
-      .slice(0, MAX_CIRCLES)
-      .map((circle, index) => ({
-        id: circle.id,
-        label: circle.label || `círculo ${index + 1}`,
-        color: circle.color || CIRCLE_COLORS[index % CIRCLE_COLORS.length],
-      }))
+    return normalizeCircles(JSON.parse(raw))
   } catch {
     return BASE_CIRCLES
   }
 }
 
-async function loadRemoteFriends(userId) {
-  const { data: rows, error } = await supabase
-    .from('friendships')
-    .select('friend_id, circle, muted')
+function toCircleRows(userId, circles) {
+  return normalizeCircles(circles).map((circle, index) => ({
+    user_id: userId,
+    id: circle.id,
+    label: circle.label,
+    color: circle.color,
+    sort_order: index,
+    is_default: circle.isDefault,
+  }))
+}
+
+async function loadRemoteCircles(userId) {
+  const { data, error } = await supabase
+    .from('user_circles')
+    .select('id, label, color, sort_order, is_default')
     .eq('user_id', userId)
+    .order('sort_order', { ascending: true })
+
+  if (error) throw error
+  if (!data?.length) return []
+
+  return normalizeCircles(
+    data.map((row) => ({
+      id: row.id,
+      label: row.label,
+      color: row.color,
+      isDefault: row.is_default,
+    })),
+  )
+}
+
+async function persistRemoteCircles(userId, circles) {
+  const rows = toCircleRows(userId, circles)
+  const ids = rows.map((row) => row.id)
+  if (ids.length) {
+    await supabase
+      .from('user_circles')
+      .delete()
+      .eq('user_id', userId)
+      .eq('is_default', false)
+      .not('id', 'in', `(${ids.join(',')})`)
+  }
+  const { error } = await supabase.from('user_circles').upsert(rows, { onConflict: 'user_id,id' })
+  if (error) throw error
+}
+
+async function reassignCircleRefs(userId, fromId, toId) {
+  if (!userId || !fromId || !toId || fromId === toId) return
+
+  await Promise.all([
+    supabase.from('friendships').update({ circle: toId }).eq('user_id', userId).eq('circle', fromId),
+    supabase.from('pulsos').update({ circle_visibility: toId }).eq('user_id', userId).eq('circle_visibility', fromId),
+  ])
+}
+
+async function loadRemoteFriends(userId) {
+  let { data: rows, error } = await supabase
+    .from('friendships')
+    .select('friend_id, circle, muted, map_order, map_angle')
+    .eq('user_id', userId)
+
+  if (error) {
+    const fallback = await supabase.from('friendships').select('friend_id, circle, muted').eq('user_id', userId)
+    if (fallback.error) throw fallback.error
+    rows = fallback.data
+    error = null
+  }
 
   if (error) throw error
   if (!rows?.length) return []
@@ -63,7 +114,12 @@ async function loadRemoteFriends(userId) {
 
   return rows.map((row) =>
     mapFriendRecord(
-      { ...(byId.get(row.friend_id) || { id: row.friend_id, name: 'Amigo' }), muted: row.muted },
+      {
+        ...(byId.get(row.friend_id) || { id: row.friend_id, name: 'Amigo' }),
+        muted: row.muted,
+        map_order: row.map_order,
+        map_angle: row.map_angle,
+      },
       row.circle || 'conhecidos',
     ),
   )
@@ -95,6 +151,8 @@ export function FriendsProvider({ children }) {
   const [blockedUsers, setBlockedUsers] = useState([])
   const [circles, setCircles] = useState(BASE_CIRCLES)
   const [hydratedFor, setHydratedFor] = useState(null)
+  const persistCirclesRef = useRef(false)
+  const skipFriendsRefreshUntilRef = useRef(0)
 
   const refreshFriends = useCallback(async () => {
     if (!userId) return []
@@ -117,6 +175,8 @@ export function FriendsProvider({ children }) {
   }, [userId])
 
   useEffect(() => {
+    persistCirclesRef.current = false
+
     if (!userId) {
       setFriends([])
       setBlockedUsers([])
@@ -125,29 +185,43 @@ export function FriendsProvider({ children }) {
       return undefined
     }
 
-    setCircles(readCircles(userId))
-
     if (!isSupabaseConfigured) {
+      setCircles(readCircles(userId))
       setFriends(readFriends(userId))
       setBlockedUsers(readBlocks(userId))
       setHydratedFor(userId)
+      persistCirclesRef.current = true
       return undefined
     }
 
     let cancelled = false
-    Promise.all([loadRemoteFriends(userId), loadRemoteBlocks()])
-      .then(([remote, blocks]) => {
-        if (!cancelled) {
-          setFriends(remote)
-          setBlockedUsers(blocks)
-          setHydratedFor(userId)
+    Promise.all([loadRemoteFriends(userId), loadRemoteBlocks(), loadRemoteCircles(userId)])
+      .then(async ([remote, blocks, remoteCircles]) => {
+        if (cancelled) return
+
+        let nextCircles = remoteCircles
+        if (!nextCircles.length) {
+          nextCircles = readCircles(userId)
+          try {
+            await persistRemoteCircles(userId, nextCircles)
+          } catch {
+            // keep local copy if the first persist fails
+          }
         }
+
+        setCircles(nextCircles)
+        setFriends(remote)
+        setBlockedUsers(blocks)
+        setHydratedFor(userId)
+        persistCirclesRef.current = true
       })
       .catch(() => {
         if (!cancelled) {
+          setCircles(readCircles(userId))
           setFriends([])
           setBlockedUsers([])
           setHydratedFor(userId)
+          persistCirclesRef.current = true
         }
       })
 
@@ -163,12 +237,16 @@ export function FriendsProvider({ children }) {
   }, [friends, userId, hydratedFor])
 
   useEffect(() => {
-    if (!userId || hydratedFor !== userId) return
+    if (!userId || hydratedFor !== userId || !persistCirclesRef.current) return
 
     try {
       localStorage.setItem(storageKey(CIRCLES_STORAGE_KEY, userId), JSON.stringify(circles))
     } catch {
       // ignore quota / private mode
+    }
+
+    if (isSupabaseConfigured && supabase) {
+      persistRemoteCircles(userId, circles).catch(() => {})
     }
   }, [circles, userId, hydratedFor])
 
@@ -182,6 +260,7 @@ export function FriendsProvider({ children }) {
     }
 
     const onVisible = () => {
+      if (Date.now() < skipFriendsRefreshUntilRef.current) return
       if (document.visibilityState === 'visible') refreshFriends()
     }
 
@@ -197,6 +276,7 @@ export function FriendsProvider({ children }) {
           'postgres_changes',
           { event: '*', schema: 'public', table: 'friendships', filter: `user_id=eq.${userId}` },
           () => {
+            if (Date.now() < skipFriendsRefreshUntilRef.current) return
             refreshFriends()
           },
         )
@@ -230,6 +310,8 @@ export function FriendsProvider({ children }) {
       if (!userId || !friendId || !nextCircle) return false
 
       let previousCircle = null
+      let previousOrder = 0
+      let persistedOrder = 0
       let changed = false
 
       setFriends((current) => {
@@ -237,8 +319,15 @@ export function FriendsProvider({ children }) {
         if (!target || target.circle === nextCircle) return current
 
         previousCircle = target.circle
+        previousOrder = target.sortOrder
         changed = true
-        const next = current.map((friend) => (friend.id === friendId ? { ...friend, circle: nextCircle } : friend))
+        const maxOrder = current
+          .filter((friend) => friend.circle === nextCircle)
+          .reduce((memo, friend) => Math.max(memo, Number.isFinite(friend.sortOrder) ? friend.sortOrder : 0), -1)
+        persistedOrder = maxOrder + 1
+        const next = current.map((friend) =>
+          friend.id === friendId ? { ...friend, circle: nextCircle, sortOrder: persistedOrder } : friend,
+        )
 
         if (!isSupabaseConfigured) writeFriends(userId, next)
         return next
@@ -253,7 +342,7 @@ export function FriendsProvider({ children }) {
 
       const { data, error } = await supabase
         .from('friendships')
-        .update({ circle: nextCircle })
+        .update({ circle: nextCircle, map_order: persistedOrder })
         .eq('user_id', userId)
         .eq('friend_id', friendId)
         .select('friend_id, circle')
@@ -261,7 +350,9 @@ export function FriendsProvider({ children }) {
       if (error || !data?.length) {
         setFriends((current) =>
           current.map((friend) =>
-            friend.id === friendId ? { ...friend, circle: previousCircle || 'conhecidos' } : friend,
+            friend.id === friendId
+              ? { ...friend, circle: previousCircle || 'conhecidos', sortOrder: previousOrder }
+              : friend,
           ),
         )
         return false
@@ -270,6 +361,46 @@ export function FriendsProvider({ children }) {
       return true
     },
     [userId],
+  )
+
+  const reorderFriendsInCircle = useCallback(
+    async (circleId, orderedIds, anglesById = null) => {
+      if (!userId || !circleId || !Array.isArray(orderedIds) || orderedIds.length === 0) return false
+
+      const rank = new Map(orderedIds.map((id, index) => [id, index]))
+      const nextAngles = anglesById instanceof Map ? anglesById : null
+
+      setFriends((current) => {
+        const next = current.map((friend) => {
+          if (friend.circle !== circleId || !rank.has(friend.id)) return friend
+          const sortOrder = rank.get(friend.id)
+          const mapAngle = nextAngles?.has(friend.id) ? nextAngles.get(friend.id) : friend.mapAngle
+          if (friend.sortOrder === sortOrder && friend.mapAngle === mapAngle) return friend
+          return { ...friend, sortOrder, mapAngle }
+        })
+        if (!isSupabaseConfigured) writeFriends(userId, next)
+        return next
+      })
+
+      if (!isSupabaseConfigured) return true
+
+      skipFriendsRefreshUntilRef.current = Date.now() + 2000
+
+      const updates = await Promise.all(
+        orderedIds.map((friendId, index) => {
+          const payload = { map_order: index }
+          if (nextAngles?.has(friendId)) payload.map_angle = nextAngles.get(friendId)
+          return supabase.from('friendships').update(payload).eq('user_id', userId).eq('friend_id', friendId)
+        }),
+      )
+
+      if (updates.some((result) => result.error)) {
+        return false
+      }
+
+      return true
+    },
+    [refreshFriends, userId],
   )
 
   const setFriendMuted = useCallback(
@@ -401,6 +532,7 @@ export function FriendsProvider({ children }) {
           id: nextId,
           label: requestedLabel || `círculo ${current.length + 1}`,
           color: CIRCLE_COLORS[current.length % CIRCLE_COLORS.length],
+          isDefault: false,
         },
       ]
     })
@@ -418,9 +550,34 @@ export function FriendsProvider({ children }) {
     )
   }, [])
 
+  const recolorCircle = useCallback((circleId, nextColor) => {
+    const color = String(nextColor || '').trim()
+    if (!circleId || !color) return
+
+    setCircles((current) =>
+      current.map((circle) => (circle.id === circleId ? { ...circle, color } : circle)),
+    )
+  }, [])
+
+  const reorderCircles = useCallback((orderedIds) => {
+    if (!Array.isArray(orderedIds) || orderedIds.length === 0) return
+
+    setCircles((current) => {
+      const byId = new Map(current.map((circle) => [circle.id, circle]))
+      const next = orderedIds.map((id) => byId.get(id)).filter(Boolean)
+      const missing = current.filter((circle) => !orderedIds.includes(circle.id))
+      return normalizeCircles([...next, ...missing])
+    })
+  }, [])
+
   const removeCircle = useCallback((circleId) => {
+    if (isDefaultCircle(circleId)) return false
+
     setCircles((currentCircles) => {
       if (currentCircles.length <= 1) return currentCircles
+
+      const target = currentCircles.find((circle) => circle.id === circleId)
+      if (!target || target.isDefault) return currentCircles
 
       const nextCircles = currentCircles.filter((circle) => circle.id !== circleId)
       const fallbackId = nextCircles[nextCircles.length - 1]?.id
@@ -431,24 +588,17 @@ export function FriendsProvider({ children }) {
         )
 
         if (!isSupabaseConfigured && userId) writeFriends(userId, nextFriends)
-
-        if (isSupabaseConfigured && supabase && userId && fallbackId) {
-          currentFriends
-            .filter((friend) => friend.circle === circleId)
-            .forEach((friend) => {
-              supabase
-                .from('friendships')
-                .update({ circle: fallbackId })
-                .eq('user_id', userId)
-                .eq('friend_id', friend.id)
-            })
-        }
-
         return nextFriends
       })
 
+      if (isSupabaseConfigured && supabase && userId && fallbackId) {
+        reassignCircleRefs(userId, circleId, fallbackId)
+      }
+
       return nextCircles
     })
+
+    return true
   }, [userId])
 
   const value = useMemo(
@@ -458,6 +608,7 @@ export function FriendsProvider({ children }) {
       circles,
       maxCircles: MAX_CIRCLES,
       moveFriend,
+      reorderFriendsInCircle,
       muteFriend,
       unmuteFriend,
       removeFromCircle,
@@ -466,6 +617,8 @@ export function FriendsProvider({ children }) {
       addFriend,
       addCircle,
       renameCircle,
+      recolorCircle,
+      reorderCircles,
       removeCircle,
       refreshFriends,
       circleOptions,
@@ -475,6 +628,7 @@ export function FriendsProvider({ children }) {
       blockedUsers,
       circles,
       moveFriend,
+      reorderFriendsInCircle,
       muteFriend,
       unmuteFriend,
       removeFromCircle,
@@ -483,6 +637,8 @@ export function FriendsProvider({ children }) {
       addFriend,
       addCircle,
       renameCircle,
+      recolorCircle,
+      reorderCircles,
       removeCircle,
       refreshFriends,
       circleOptions,

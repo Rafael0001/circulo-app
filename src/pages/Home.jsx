@@ -7,15 +7,17 @@ import { usePulsos } from '../hooks/usePulsos'
 
 export default function Home() {
   const navigate = useNavigate()
-  const { friends, circles, maxCircles, moveFriend, muteFriend, unmuteFriend, removeFromCircle, blockPerson, addCircle, renameCircle, removeCircle } = useFriends()
+  const { friends, circles, moveFriend, reorderFriendsInCircle, muteFriend, unmuteFriend, removeFromCircle, blockPerson, renameCircle, removeCircle } = useFriends()
   const { pulsos, criarPulso } = usePulsos()
 
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-28 pt-6">
-      <header className="mb-5 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[#90795e]">seu círculo</p>
-          <h1 className="mt-1 text-3xl font-semibold text-[#2e2926]">Círculo</h1>
+      <header className="mb-4 flex items-center justify-between gap-3">
+        <div className="flex items-center gap-2.5">
+          <img src="/logo-colorida.png" alt="" className="h-12 w-12 object-contain" />
+          <h1 className="font-display text-[1.85rem] font-semibold leading-none tracking-[-0.03em] text-[#2e2926]">
+            Círculo
+          </h1>
         </div>
         <div className="rounded-full bg-[#f7e8d2] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8b5f38]">
           {friends.length === 0 ? 'vazio' : `${friends.length} amigos`}
@@ -25,15 +27,14 @@ export default function Home() {
       <CirculoViz
         friends={friends}
         circles={circles}
-        maxCircles={maxCircles}
         pulsos={pulsos}
         onMoveFriend={moveFriend}
+        onReorderFriends={reorderFriendsInCircle}
         onViewProfile={(friend) => navigate(`/perfil/${friend.id}`, { state: { from: '/' } })}
         onMuteFriend={muteFriend}
         onUnmuteFriend={unmuteFriend}
         onRemoveFriend={removeFromCircle}
         onBlockFriend={blockPerson}
-        onAddCircle={addCircle}
         onRenameCircle={renameCircle}
         onRemoveCircle={removeCircle}
         onCreatePulso={criarPulso}

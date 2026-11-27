@@ -30,7 +30,7 @@ export default function CriarPulso() {
   const savedSettings = useMemo(() => readPulsoPublishSettings(), [])
   const defaultVisibility = circles[circles.length - 1]?.id ?? ''
   const [settings, setSettings] = useState({
-    duration_hours: savedSettings ? savedSettings.durationHours : 24,
+    duration_hours: null,
     include_inner: savedSettings?.includeInner !== false,
     circle_visibility: savedSettings?.circleId || defaultVisibility,
   })

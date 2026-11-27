@@ -4,7 +4,13 @@ import { useAuth } from './useAuth'
 import { useFriends } from './useFriends'
 import { readFriends, storageKey } from '../lib/friendsStorage'
 import { isBlockedPair } from '../lib/blocksStorage'
-import { BASE_CIRCLE_IDS, expiresAtFromDuration, parsePulsoDuration, pulsoReachesPlacement } from '../lib/pulsoVisibility'
+import {
+  activePulsoFlags,
+  BASE_CIRCLE_IDS,
+  expiresAtFromDuration,
+  parsePulsoDuration,
+  pulsoReachesPlacement,
+} from '../lib/pulsoVisibility'
 import { ingestPulsoAlerts, shouldNotifyAbout } from '../lib/notifications'
 import {
   hydrateDemoPhotos,
@@ -48,12 +54,14 @@ function normalizePulso(pulso, authorName, commentNames) {
     return pulso
   }
 
+  const flags = activePulsoFlags(pulso)
+
   return {
     ...pulso,
     author: authorName || pulso.author || 'Amigo',
     author_id: pulso.user_id || pulso.author_id,
-    is_importante: Boolean(pulso.is_importante),
-    is_urgente: Boolean(pulso.is_urgente),
+    is_importante: flags.is_importante,
+    is_urgente: flags.is_urgente,
     photos: normalizePhotos(pulso.photos ?? pulso.pulso_photos),
     comments: normalizeComments(pulso.comments ?? pulso.pulso_comments, commentNames),
     duration_hours: pulso.duration_hours ?? null,
@@ -338,7 +346,7 @@ export function PulsosProvider({ children }) {
       is_importante = false,
       is_urgente = false,
       photos = [],
-      duration_hours = 24,
+      duration_hours = null,
       include_inner = true,
     }) => {
       const text = (content || '').trim()

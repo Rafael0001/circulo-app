@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  font-family: 'Inter', 'Segoe UI', sans-serif;
+  --font-display: 'Fraunces', Georgia, serif;
+  font-family: 'Plus Jakarta Sans', 'Segoe UI', sans-serif;
   line-height: 1.5;
   font-weight: 400;
   color: #1f2937;
@@ -10,6 +11,11 @@
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+}
+
+.font-display {
+  font-family: var(--font-display);
+  font-optical-sizing: auto;
 }
 
 html {
@@ -37,11 +43,11 @@ textarea {
 
 @keyframes pulse-ring {
   0% {
-    transform: scale(0.8);
-    opacity: 0.8;
+    transform: scale(1);
+    opacity: 0.5;
   }
   100% {
-    transform: scale(1.35);
+    transform: scale(1.24);
     opacity: 0;
   }
 }
@@ -75,11 +81,11 @@ textarea {
 }
 
 .pulse-ring-delayed {
-  animation-delay: 0.7s;
+  animation-delay: calc(-2.2s / 3);
 }
 
 .pulse-ring-delayed-2 {
-  animation-delay: 1.4s;
+  animation-delay: calc(-2.2s * 2 / 3);
 }
 
 .center-pulse {

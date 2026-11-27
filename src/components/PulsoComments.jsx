@@ -2,6 +2,7 @@ import { Pencil, Send, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { usePulsos } from '../hooks/usePulsos'
+import { absoluteTimeFrom, relativeTimeFrom } from '../lib/relativeTime'
 
 export default function PulsoComments({ pulso }) {
   const { user } = useAuth()
@@ -77,9 +78,21 @@ export default function PulsoComments({ pulso }) {
             return (
               <li key={comment.id} className="rounded-2xl bg-[#fffaf4] px-3 py-2">
                 <div className="flex items-start justify-between gap-2">
-                  <span className="text-[10px] uppercase tracking-[0.14em] text-[#9a8e80]">
-                    {comment.author}
-                  </span>
+                  <p className="flex min-w-0 items-baseline gap-1.5 text-[12px]">
+                    <span className="truncate font-semibold text-[#2f2c2a]">{comment.author}</span>
+                    {comment.created_at ? (
+                      <>
+                        <span className="text-[#d4c6b6]">·</span>
+                        <time
+                          className="shrink-0 text-[#9a8e80]"
+                          dateTime={comment.created_at}
+                          title={absoluteTimeFrom(comment.created_at)}
+                        >
+                          {relativeTimeFrom(comment.created_at)}
+                        </time>
+                      </>
+                    ) : null}
+                  </p>
                   {canDelete && editingId !== comment.id && (
                     <div className="flex items-center gap-1">
                       {isCommentAuthor && (

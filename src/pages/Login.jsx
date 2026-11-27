@@ -56,8 +56,13 @@ export default function Login() {
       <div className="w-full rounded-[30px] border border-[#f0e0d0] bg-white/80 p-6 shadow-[0_18px_40px_rgba(153,111,70,0.08)] backdrop-blur-sm">
         <div className="mb-6 text-center">
           <p className="text-[10px] font-semibold uppercase tracking-[0.35em] text-[#a68b6d]">bem-vindo</p>
-          <h1 className="mt-3 text-3xl font-semibold text-[#2a231f]">Círculo</h1>
-          <p className="mt-2 text-sm text-[#7d6d62]">
+          <div className="mt-3 flex items-center justify-center gap-2.5">
+            <img src="/logo-colorida.png" alt="" className="h-12 w-12 object-contain" />
+            <h1 className="font-display text-[1.85rem] font-semibold leading-none tracking-[-0.03em] text-[#2e2926]">
+              Círculo
+            </h1>
+          </div>
+          <p className="mt-3 text-sm text-[#7d6d62]">
             {isSupabaseConfigured ? 'Entre com sua conta.' : 'Modo demonstração — os dados ficam neste dispositivo.'}
           </p>
         </div>

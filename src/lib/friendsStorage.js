@@ -15,6 +15,10 @@ function colorForId(id) {
 
 export function mapFriendRecord(person, circle) {
   const name = person?.name || 'Amigo'
+  const rawOrder = person?.sortOrder ?? person?.map_order
+  const sortOrder = Number.isFinite(Number(rawOrder)) ? Number(rawOrder) : 0
+  const rawAngle = person?.mapAngle ?? person?.map_angle
+  const mapAngle = Number.isFinite(Number(rawAngle)) ? Number(rawAngle) : null
   return {
     id: person.id,
     name,
@@ -23,6 +27,8 @@ export function mapFriendRecord(person, circle) {
     avatarUrl: person.avatar_url || person.avatarUrl || null,
     circle: circle || person.circle || 'conhecidos',
     muted: Boolean(person.muted),
+    sortOrder,
+    mapAngle,
   }
 }
 

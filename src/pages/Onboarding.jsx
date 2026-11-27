@@ -60,7 +60,7 @@ export default function Onboarding() {
             <img
               src={slide.image}
               alt={slide.title}
-              className="max-h-[min(72vh,640px)] w-full object-contain"
+              className="max-h-[min(72vh,640px)] w-full rounded-[28px] object-contain"
               onError={() => setBrokenImage((current) => ({ ...current, [slide.image]: true }))}
             />
           )}

@@ -19,7 +19,7 @@ export function pulsoReachesPlacement(visibility, placement, orderedIds = BASE_C
 export const PULSO_DURATIONS = [12, 24, 48]
 const PULSO_SETTINGS_KEY = 'circulo_pulso_publish_settings'
 
-export function parsePulsoDuration(value, fallback = 24) {
+export function parsePulsoDuration(value, fallback = null) {
   if (value === null || value === '' || value === 'none') return null
   if (value === undefined) return fallback
   const hours = Number(value)
@@ -33,7 +33,7 @@ export function readPulsoPublishSettings() {
     return {
       durationHours: Object.prototype.hasOwnProperty.call(parsed, 'durationHours')
         ? parsePulsoDuration(parsed.durationHours, null)
-        : 24,
+        : null,
       includeInner: parsed.includeInner !== false,
       circleId: typeof parsed.circleId === 'string' ? parsed.circleId : '',
     }
@@ -68,9 +68,26 @@ export function hasDefinedDuration(hours) {
   return PULSO_DURATIONS.includes(Number(hours))
 }
 
+export const URGENT_TAG_HOURS = 48
+export const IMPORTANT_TAG_HOURS = 24 * 7
+
+export function activePulsoFlags(pulso, now = Date.now()) {
+  const created = new Date(pulso?.created_at || 0).getTime()
+  const ageMs = Number.isFinite(created) ? Math.max(0, now - created) : Number.POSITIVE_INFINITY
+  const urgentLimit = URGENT_TAG_HOURS * 60 * 60 * 1000
+  const importantLimit = IMPORTANT_TAG_HOURS * 60 * 60 * 1000
+
+  return {
+    is_urgente: Boolean(pulso?.is_urgente) && ageMs < urgentLimit,
+    is_importante: Boolean(pulso?.is_importante) && ageMs < importantLimit,
+  }
+}
+
 export function durationLabel(hours) {
-  if (!hasDefinedDuration(hours)) return ''
-  return `${hours}h`
+  if (Number(hours) === 12) return '12 horas'
+  if (Number(hours) === 24) return '1 dia'
+  if (Number(hours) === 48) return '2 dias'
+  return ''
 }
 
 export function visibilityOptionLabel(circles, circle) {
@@ -85,16 +102,49 @@ export function visibilityOptionLabel(circles, circle) {
   return `${circle.label} · inclui ${inner}`
 }
 
-export function visibilityHint(circles, selectedId) {
-  const index = Math.max(0, circles.findIndex((circle) => circle.id === selectedId))
-  const selected = circles[index]
-  if (!selected) return ''
-  if (index === 0) return `Somente ${selected.label} veem este pulso.`
+export function circlesReached(circles = [], selectedId, includeInner = true) {
+  const ids = circles.map((circle) => circle.id)
+  return circles.filter((circle) =>
+    pulsoReachesPlacement(selectedId, circle.id, ids, includeInner !== false),
+  )
+}
 
-  const inner = circles
-    .slice(0, index)
-    .map((circle) => circle.label)
-    .join(', ')
+export function toggleAudienceCircle(circles = [], current, clickedId) {
+  const includeInner = current?.includeInner !== false
+  const circleId = current?.circleId
+  const index = circles.findIndex((circle) => circle.id === clickedId)
+  if (index < 0) {
+    return { circleId, includeInner }
+  }
 
-  return `${selected.label} e também ${inner}.`
+  const reached = circlesReached(circles, circleId, includeInner)
+  const isOn = reached.some((circle) => circle.id === clickedId)
+
+  if (!isOn) {
+    return { circleId: clickedId, includeInner: true }
+  }
+
+  if (index === 0) {
+    return { circleId: circles[0].id, includeInner: true }
+  }
+
+  return { circleId: circles[index - 1].id, includeInner: true }
+}
+
+export function visibilityHint(circles = [], selectedId, includeInner = true) {
+  const selected = circles.find((circle) => circle.id === selectedId)
+  const reached = circlesReached(circles, selectedId, includeInner)
+  if (!selected || reached.length === 0) return ''
+
+  if (includeInner === false || reached.length === 1) {
+    return `Somente ${selected.label} veem este pulso.`
+  }
+
+  if (reached.length === circles.length) {
+    return `Todos os círculos, até ${selected.label}.`
+  }
+
+  const names = reached.map((circle) => circle.label)
+  const last = names.pop()
+  return `${names.join(', ')} e ${last} veem este pulso.`
 }
