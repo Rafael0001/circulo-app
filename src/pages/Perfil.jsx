@@ -1,17 +1,215 @@
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { useLocation, useNavigate, useParams } from 'react-router-dom'
+import { Camera } from 'lucide-react'
 import NavBar from '../components/NavBar'
+import Avatar from '../components/Avatar'
+import { useAuth } from '../hooks/useAuth'
+import { useFriends } from '../hooks/useFriends'
+import { AVATAR_ACCEPT, validateAvatarFile } from '../lib/imageFile'
+import { loadAvatarUrl, removeAvatar, uploadAvatar } from '../lib/avatarStorage'
+import { isSupabaseConfigured, supabase } from '../lib/supabase'
 
-const defaultProfile = {
-  name: 'Ana',
-  bio: 'Amo encontros espontâneos, café e conversar de verdade.',
-  interests: ['café', 'viagens', 'música', 'livros'],
-}
+const STORAGE_KEY = 'circulo_profile'
 
 const interestOptions = ['café', 'viagens', 'música', 'livros', 'natureza', 'fotografia', 'arte', 'saúde']
 
+function emptyProfile(user) {
+  const name = user?.user_metadata?.name || user?.email?.split('@')[0] || 'Você'
+  return {
+    name,
+    bio: '',
+    interests: [],
+  }
+}
+
+function readProfile(user) {
+  const fallback = emptyProfile(user)
+  if (!user?.id) return fallback
+
+  try {
+    const raw = localStorage.getItem(`${STORAGE_KEY}:${user.id}`)
+    if (!raw) return fallback
+    const parsed = JSON.parse(raw)
+    return {
+      name: parsed.name || fallback.name,
+      bio: parsed.bio ?? '',
+      interests: Array.isArray(parsed.interests) ? parsed.interests : [],
+    }
+  } catch {
+    return fallback
+  }
+}
+
 export default function Perfil() {
-  const [profile, setProfile] = useState(defaultProfile)
-  const [draft, setDraft] = useState(defaultProfile)
+  const navigate = useNavigate()
+  const location = useLocation()
+  const { userId: routeUserId } = useParams()
+  const { user, signOut, isAdmin } = useAuth()
+  const { friends, blockedUsers, unblockPerson } = useFriends()
+  const isOwn = !routeUserId || routeUserId === user?.id
+  const fileInputRef = useRef(null)
+  const [profile, setProfile] = useState(() => readProfile(user))
+  const [draft, setDraft] = useState(profile)
+  const [saved, setSaved] = useState(false)
+  const [signingOut, setSigningOut] = useState(false)
+  const [avatarUrl, setAvatarUrl] = useState(null)
+  const [previewUrl, setPreviewUrl] = useState(null)
+  const [previewFile, setPreviewFile] = useState(null)
+  const [previewMime, setPreviewMime] = useState(null)
+  const [photoBusy, setPhotoBusy] = useState(false)
+  const [photoMessage, setPhotoMessage] = useState('')
+  const [photoError, setPhotoError] = useState('')
+  const [otherProfile, setOtherProfile] = useState(null)
+  const [otherError, setOtherError] = useState('')
+  const [unblockingId, setUnblockingId] = useState(null)
+
+  useEffect(() => {
+    if (isOwn) {
+      setOtherProfile(null)
+      setOtherError('')
+      return undefined
+    }
+
+    let cancelled = false
+
+    const loadOther = async () => {
+      const friend = friends.find((item) => item.id === routeUserId)
+
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase
+          .from('profiles')
+          .select('id, name, bio, avatar_url, interests')
+          .eq('id', routeUserId)
+          .maybeSingle()
+
+        if (cancelled) return
+        if (error || !data) {
+          setOtherError(friend ? '' : 'Você não tem acesso a este perfil.')
+          setOtherProfile(
+            friend
+              ? { id: friend.id, name: friend.name, bio: '', avatar_url: friend.avatarUrl, interests: [] }
+              : null,
+          )
+          return
+        }
+
+        setOtherError('')
+        setOtherProfile(data)
+        return
+      }
+
+      if (!friend) {
+        setOtherError('Você não tem acesso a este perfil.')
+        setOtherProfile(null)
+        return
+      }
+
+      try {
+        const raw = localStorage.getItem(`${STORAGE_KEY}:${routeUserId}`)
+        const parsed = raw ? JSON.parse(raw) : {}
+        setOtherProfile({
+          id: friend.id,
+          name: parsed.name || friend.name,
+          bio: parsed.bio || '',
+          avatar_url: friend.avatarUrl,
+          interests: Array.isArray(parsed.interests) ? parsed.interests : [],
+        })
+        setOtherError('')
+      } catch {
+        setOtherProfile({ id: friend.id, name: friend.name, bio: '', avatar_url: friend.avatarUrl, interests: [] })
+      }
+    }
+
+    loadOther()
+    return () => {
+      cancelled = true
+    }
+  }, [isOwn, routeUserId, friends, blockedUsers])
+
+  useEffect(() => {
+    let cancelled = false
+    let objectUrl = null
+
+    const load = async () => {
+      if (!user?.id || !isOwn) {
+        setAvatarUrl(null)
+        return
+      }
+
+      const { url, error } = await loadAvatarUrl(user.id)
+      if (cancelled) {
+        if (url?.startsWith('blob:')) URL.revokeObjectURL(url)
+        return
+      }
+
+      if (error) {
+        setPhotoError('Não foi possível carregar a foto de perfil.')
+        return
+      }
+
+      objectUrl = url?.startsWith('blob:') ? url : null
+      setAvatarUrl(url)
+    }
+
+    load()
+
+    return () => {
+      cancelled = true
+      if (objectUrl) URL.revokeObjectURL(objectUrl)
+    }
+  }, [user?.id, isOwn])
+
+  const goBackToMap = () => {
+    navigate(location.state?.from || '/', { replace: true })
+  }
+
+  if (!isOwn) {
+    return (
+      <div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-28 pt-6">
+        <header className="mb-5 flex items-center justify-between">
+          <div>
+            <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[#90795e]">perfil</p>
+            <h1 className="mt-2 text-3xl font-semibold text-[#2e2926]">{otherProfile?.name || 'Pessoa'}</h1>
+          </div>
+          <button
+            type="button"
+            onClick={goBackToMap}
+            className="rounded-full bg-[#f3e6d3] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7f5b3d]"
+          >
+            voltar ao mapa
+          </button>
+        </header>
+
+        {otherError && !otherProfile ? (
+          <p className="rounded-[24px] border border-[#eadfce] bg-white/80 px-4 py-6 text-sm text-[#8d7c6b]">{otherError}</p>
+        ) : otherProfile ? (
+          <div className="rounded-[30px] border border-[#f0e6d8] bg-white/85 p-5">
+            <div className="flex items-center gap-4">
+              <Avatar name={otherProfile.name} src={otherProfile.avatar_url} size={64} />
+              <div>
+                <p className="text-lg font-semibold text-[#2a231f]">{otherProfile.name}</p>
+                {otherError ? <p className="text-sm text-[#8d7c6b]">{otherError}</p> : null}
+              </div>
+            </div>
+            {otherProfile.bio ? <p className="mt-4 text-sm text-[#5a4b3f]">{otherProfile.bio}</p> : null}
+            {Array.isArray(otherProfile.interests) && otherProfile.interests.length ? (
+              <div className="mt-4 flex flex-wrap gap-2">
+                {otherProfile.interests.map((interest) => (
+                  <span key={interest} className="rounded-full border border-[#eadfce] bg-[#fffaf4] px-2.5 py-1.5 text-xs text-[#5d5149]">
+                    {interest}
+                  </span>
+                ))}
+              </div>
+            ) : null}
+          </div>
+        ) : (
+          <p className="text-sm text-[#8d7c6b]">Carregando perfil…</p>
+        )}
+
+        <NavBar />
+      </div>
+    )
+  }
 
   const toggleInterest = (interest) => {
     const updated = draft.interests.includes(interest)
@@ -23,6 +221,104 @@ export default function Perfil() {
 
   const handleSave = () => {
     setProfile(draft)
+    try {
+      if (user?.id) {
+        localStorage.setItem(`${STORAGE_KEY}:${user.id}`, JSON.stringify(draft))
+      }
+    } catch {
+      // ignore
+    }
+    setSaved(true)
+    window.setTimeout(() => setSaved(false), 1400)
+  }
+
+  const handleSignOut = async () => {
+    setSigningOut(true)
+    await signOut()
+    navigate('/login')
+  }
+
+  const clearPreview = () => {
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewUrl(null)
+    setPreviewFile(null)
+    setPreviewMime(null)
+    if (fileInputRef.current) {
+      fileInputRef.current.value = ''
+    }
+  }
+
+  const handlePickPhoto = () => {
+    if (photoBusy) return
+    fileInputRef.current?.click()
+  }
+
+  const handleFileChange = async (event) => {
+    const file = event.target.files?.[0]
+    setPhotoMessage('')
+    setPhotoError('')
+
+    const { mime, error } = await validateAvatarFile(file)
+    if (error) {
+      setPhotoError(error)
+      clearPreview()
+      return
+    }
+
+    if (previewUrl) URL.revokeObjectURL(previewUrl)
+    setPreviewFile(file)
+    setPreviewMime(mime)
+    setPreviewUrl(URL.createObjectURL(file))
+  }
+
+  const handleConfirmPhoto = async () => {
+    if (!previewFile || !user?.id) return
+
+    setPhotoBusy(true)
+    setPhotoError('')
+    setPhotoMessage('')
+
+    const { url, error } = await uploadAvatar({
+      userId: user.id,
+      file: previewFile,
+      mime: previewMime,
+      previousUrl: avatarUrl,
+    })
+
+    setPhotoBusy(false)
+
+    if (error) {
+      setPhotoError(error.message || 'Não foi possível enviar a foto. Tente novamente.')
+      return
+    }
+
+    if (avatarUrl?.startsWith('blob:')) URL.revokeObjectURL(avatarUrl)
+    setAvatarUrl(url)
+    clearPreview()
+    setPhotoMessage('Foto atualizada.')
+    window.setTimeout(() => setPhotoMessage(''), 1800)
+  }
+
+  const handleRemovePhoto = async () => {
+    if (!user?.id || photoBusy) return
+
+    setPhotoBusy(true)
+    setPhotoError('')
+    setPhotoMessage('')
+
+    const { error } = await removeAvatar({ userId: user.id, previousUrl: avatarUrl })
+    setPhotoBusy(false)
+
+    if (error) {
+      setPhotoError(error.message || 'Não foi possível remover a foto.')
+      return
+    }
+
+    if (avatarUrl?.startsWith('blob:')) URL.revokeObjectURL(avatarUrl)
+    setAvatarUrl(null)
+    clearPreview()
+    setPhotoMessage('Foto removida.')
+    window.setTimeout(() => setPhotoMessage(''), 1800)
   }
 
   return (
@@ -32,21 +328,83 @@ export default function Perfil() {
           <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[#90795e]">perfil</p>
           <h1 className="mt-2 text-3xl font-semibold text-[#2e2926]">Você</h1>
         </div>
-        <button type="button" onClick={handleSave} className="rounded-full bg-[#f3e6d3] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7f5b3d]">
-          salvar
+        <button
+          type="button"
+          onClick={handleSave}
+          className="rounded-full bg-[#f3e6d3] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.18em] text-[#7f5b3d]"
+        >
+          {saved ? 'salvo' : 'salvar'}
         </button>
       </header>
 
       <div className="rounded-[30px] border border-[#f0e6d8] bg-white/85 p-5 shadow-[0_14px_36px_rgba(166,139,107,0.08)]">
         <div className="flex items-center gap-4">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-[#f4d9b5] text-xl font-semibold text-[#40382f]">
-            {profile.name.slice(0, 2).toUpperCase()}
+          <div className="relative shrink-0">
+            <Avatar name={profile.name} src={previewUrl || avatarUrl} size={64} />
+            <button
+              type="button"
+              onClick={handlePickPhoto}
+              disabled={photoBusy}
+              className="absolute -bottom-1 -right-1 flex h-8 w-8 items-center justify-center rounded-full border border-[#eadfce] bg-white text-[#7f5b3d] shadow-sm disabled:opacity-50"
+              aria-label="Alterar foto de perfil"
+            >
+              <Camera size={14} />
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept={AVATAR_ACCEPT}
+              className="hidden"
+              onChange={handleFileChange}
+            />
           </div>
           <div>
             <p className="text-lg font-semibold text-[#2a231f]">{profile.name}</p>
-            <p className="text-sm text-[#7d6d62]">@ana</p>
+            <p className="text-sm text-[#7d6d62]">@{profile.name.toLowerCase().replace(/\s+/g, '')}</p>
+            {isAdmin ? (
+              <p className="mt-1 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8b5f38]">admin</p>
+            ) : null}
           </div>
         </div>
+
+        {previewUrl ? (
+          <div className="mt-4 rounded-2xl border border-[#eadfce] bg-[#fffaf4] p-3">
+            <p className="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-[#9a8e80]">prévia</p>
+            <img src={previewUrl} alt="Prévia da foto de perfil" className="mx-auto h-32 w-32 rounded-full object-cover" />
+            <div className="mt-3 flex gap-2">
+              <button
+                type="button"
+                onClick={clearPreview}
+                disabled={photoBusy}
+                className="flex-1 rounded-full border border-[#eadfce] bg-white px-3 py-2 text-sm text-[#6b543f] disabled:opacity-60"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPhoto}
+                disabled={photoBusy}
+                className="flex-1 rounded-full bg-[#8f6545] px-3 py-2 text-sm font-medium text-white disabled:opacity-60"
+              >
+                {photoBusy ? 'Enviando…' : 'Confirmar'}
+              </button>
+            </div>
+          </div>
+        ) : null}
+
+        {avatarUrl && !previewUrl ? (
+          <button
+            type="button"
+            onClick={handleRemovePhoto}
+            disabled={photoBusy}
+            className="mt-3 text-sm text-[#8a4a38] disabled:opacity-60"
+          >
+            {photoBusy ? 'Removendo…' : 'Remover foto'}
+          </button>
+        ) : null}
+
+        {photoError ? <p className="mt-3 text-sm text-[#a63f35]">{photoError}</p> : null}
+        {photoMessage ? <p className="mt-3 text-sm text-[#5f7a4a]">{photoMessage}</p> : null}
 
         <div className="mt-5 space-y-4">
           <label className="block text-sm text-[#5a4b3f]">
@@ -89,6 +447,43 @@ export default function Perfil() {
           </div>
         </div>
       </div>
+
+      {blockedUsers.length ? (
+        <section className="mt-4 rounded-[24px] border border-[#eadfce] bg-white/85 p-4">
+          <p className="mb-3 text-[11px] font-semibold uppercase tracking-[0.2em] text-[#9a8e80]">pessoas bloqueadas</p>
+          <div className="space-y-2">
+            {blockedUsers.map((person) => (
+              <div key={person.id} className="flex items-center justify-between gap-3">
+                <div className="flex min-w-0 items-center gap-2">
+                  <Avatar name={person.name} src={person.avatarUrl} size={36} />
+                  <p className="truncate text-sm text-[#4f4036]">{person.name}</p>
+                </div>
+                <button
+                  type="button"
+                  disabled={unblockingId === person.id}
+                  onClick={async () => {
+                    setUnblockingId(person.id)
+                    await unblockPerson(person.id)
+                    setUnblockingId(null)
+                  }}
+                  className="rounded-full border border-[#eadfce] px-3 py-1.5 text-[11px] font-medium text-[#6b543f] disabled:opacity-60"
+                >
+                  {unblockingId === person.id ? 'Desbloqueando…' : 'Desbloquear'}
+                </button>
+              </div>
+            ))}
+          </div>
+        </section>
+      ) : null}
+
+      <button
+        type="button"
+        onClick={handleSignOut}
+        disabled={signingOut}
+        className="mt-4 w-full rounded-full border border-[#eadfce] bg-white px-4 py-3 text-sm font-medium text-[#6b543f] disabled:opacity-60"
+      >
+        {signingOut ? 'Saindo…' : 'Sair'}
+      </button>
 
       <NavBar />
     </div>
