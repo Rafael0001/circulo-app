@@ -1,6 +1,6 @@
 import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { AlertTriangle, Clock, Minus, Pencil, Plus, Send, Settings, Trash2, Zap } from 'lucide-react'
+import { AlertTriangle, Bell, Clock, Minus, Pencil, Plus, Send, Settings, Trash2, Zap } from 'lucide-react'
 import { isDefaultCircle } from '../lib/circles'
 import {
   angleFromPoint,
@@ -10,6 +10,7 @@ import {
   polarToCartesian,
   reorderIdsByAngle,
 } from '../lib/circleLayout'
+import { shortDisplayName } from '../lib/names'
 import {
   durationLabel,
   hasDefinedDuration,
@@ -436,6 +437,14 @@ export default function CirculoViz({
           </button>
           <button
             type="button"
+            onClick={() => navigate('/configurar-notificacoes')}
+            className="flex h-7 w-7 items-center justify-center rounded-full border border-[#eadfce] bg-white text-[#6f5a4a]"
+            aria-label="Configurações de notificações"
+          >
+            <Bell size={14} />
+          </button>
+          <button
+            type="button"
             onClick={() => navigate('/configurar-circulos')}
             className="flex h-7 w-7 items-center justify-center rounded-full border border-[#eadfce] bg-white text-[#6f5a4a]"
             aria-label="Configurações dos círculos"
@@ -609,7 +618,7 @@ export default function CirculoViz({
 
                   {placed.showName || isSelected ? (
                     <text x="0" y={size + 14} textAnchor="middle" fontSize="10" fill="#685f57">
-                      {friend.name}
+                      {shortDisplayName(friend.name)}
                     </text>
                   ) : null}
                 </g>

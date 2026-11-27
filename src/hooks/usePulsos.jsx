@@ -11,7 +11,8 @@ import {
   parsePulsoDuration,
   pulsoReachesPlacement,
 } from '../lib/pulsoVisibility'
-import { ingestPulsoAlerts, shouldNotifyAbout } from '../lib/notifications'
+import { alertStillMatches, ingestPulsoAlerts } from '../lib/notifications'
+import { useNotificationPreferences } from './useNotificationPreferences'
 import {
   hydrateDemoPhotos,
   MAX_PULSO_PHOTOS,
@@ -19,6 +20,16 @@ import {
   removePulsoPhotos,
   uploadPulsoPhotos,
 } from '../lib/pulsoPhotos'
+import {
+  isAllowedReactionEmoji,
+  normalizeReaction,
+  normalizeReactions,
+} from '../lib/pulsoReactions'
+import {
+  normalizeHideIds,
+  readStoredPulsoHides,
+  writeStoredPulsoHides,
+} from '../lib/pulsoHides'
 
 const STORAGE_KEY = 'circulo_pulsos'
 const CIRCLES_STORAGE_KEY = 'circulo_circles'
@@ -49,12 +60,13 @@ function normalizeComments(raw, names = new Map()) {
     .sort((a, b) => new Date(a.created_at || 0).getTime() - new Date(b.created_at || 0).getTime())
 }
 
-function normalizePulso(pulso, authorName, commentNames) {
+function normalizePulso(pulso, authorName, nameLookup) {
   if (!pulso || typeof pulso !== 'object') {
     return pulso
   }
 
   const flags = activePulsoFlags(pulso)
+  const names = nameLookup instanceof Map ? nameLookup : new Map()
 
   return {
     ...pulso,
@@ -63,7 +75,8 @@ function normalizePulso(pulso, authorName, commentNames) {
     is_importante: flags.is_importante,
     is_urgente: flags.is_urgente,
     photos: normalizePhotos(pulso.photos ?? pulso.pulso_photos),
-    comments: normalizeComments(pulso.comments ?? pulso.pulso_comments, commentNames),
+    comments: normalizeComments(pulso.comments ?? pulso.pulso_comments, names),
+    reactions: normalizeReactions(pulso.reactions ?? pulso.pulso_reactions, names),
     duration_hours: pulso.duration_hours ?? null,
     include_inner: pulso.include_inner !== false,
   }
@@ -179,6 +192,9 @@ function loadDemoPulsos(userId, friends) {
         comments: next.comments.filter(
           (comment) => comment.user_id === userId || !isBlockedPair(userId, comment.user_id),
         ),
+        reactions: next.reactions.filter(
+          (reaction) => reaction.user_id === userId || !isBlockedPair(userId, reaction.user_id),
+        ),
       }
     })
 }
@@ -187,7 +203,7 @@ async function loadRemotePulsos(userId) {
   const { data: rows, error } = await supabase
     .from('pulsos')
     .select(
-      'id, user_id, content, is_importante, is_urgente, circle_visibility, created_at, expires_at, duration_hours, include_inner, pulso_photos(id, url, storage_path, sort_order), pulso_comments(id, pulso_id, user_id, content, created_at, author_name)',
+      'id, user_id, content, is_importante, is_urgente, circle_visibility, created_at, expires_at, duration_hours, include_inner, pulso_photos(id, url, storage_path, sort_order), pulso_comments(id, pulso_id, user_id, content, created_at, author_name), pulso_reactions(id, pulso_id, user_id, emoji, created_at)',
     )
     .or('expires_at.is.null,expires_at.gt.now()')
     .order('created_at', { ascending: false })
@@ -199,7 +215,10 @@ async function loadRemotePulsos(userId) {
   const commentAuthorIds = [
     ...new Set(rows.flatMap((row) => (row.pulso_comments || []).map((comment) => comment.user_id))),
   ]
-  const profileIds = [...new Set([...authorIds, ...commentAuthorIds])]
+  const reactionAuthorIds = [
+    ...new Set(rows.flatMap((row) => (row.pulso_reactions || []).map((reaction) => reaction.user_id))),
+  ]
+  const profileIds = [...new Set([...authorIds, ...commentAuthorIds, ...reactionAuthorIds])]
   const { data: profiles } = await supabase.from('profiles').select('id, name').in('id', profileIds)
   const names = new Map((profiles || []).map((profile) => [profile.id, profile.name]))
 
@@ -215,36 +234,57 @@ async function loadRemotePulsos(userId) {
 export function PulsosProvider({ children }) {
   const { user } = useAuth()
   const { friends, blockedUsers } = useFriends()
+  const { prefs: notificationPrefs } = useNotificationPreferences()
   const userId = user?.id ?? null
   const friendKey = friends.map((friend) => friend.id).join('|')
   const blockKey = blockedUsers.map((item) => item.id).sort().join('|')
+  const prefsKey = `${notificationPrefs.pulsoFilter}|${notificationPrefs.allCircles}|${notificationPrefs.circleIds.join(',')}`
   const [pulsos, setPulsos] = useState([])
+  const [hiddenIds, setHiddenIds] = useState([])
   const [alerts, setAlerts] = useState([])
   const [hydratedFor, setHydratedFor] = useState(null)
+
+  const loadHiddenIds = useCallback(async () => {
+    if (!userId) return []
+
+    if (!isSupabaseConfigured || !supabase) {
+      return readStoredPulsoHides(userId)
+    }
+
+    const { data, error } = await supabase.from('pulso_hides').select('pulso_id').eq('user_id', userId)
+    if (error) return readStoredPulsoHides(userId)
+    return normalizeHideIds(data)
+  }, [userId])
 
   const refreshPulsos = useCallback(async () => {
     if (!userId) return []
 
     if (!isSupabaseConfigured) {
-      const local = await hydratePulsos(loadDemoPulsos(userId, friends))
+      const [local, hides] = await Promise.all([
+        hydratePulsos(loadDemoPulsos(userId, friends)),
+        loadHiddenIds(),
+      ])
       setPulsos(local)
-      setAlerts(ingestPulsoAlerts(userId, local, friends))
+      setHiddenIds(hides)
+      setAlerts(ingestPulsoAlerts(userId, local, friends, notificationPrefs))
       return local
     }
 
     try {
-      const remote = await loadRemotePulsos(userId)
+      const [remote, hides] = await Promise.all([loadRemotePulsos(userId), loadHiddenIds()])
       setPulsos(remote)
-      setAlerts(ingestPulsoAlerts(userId, remote, friends))
+      setHiddenIds(hides)
+      setAlerts(ingestPulsoAlerts(userId, remote, friends, notificationPrefs))
       return remote
     } catch {
       return []
     }
-  }, [userId, friends, friendKey, blockKey])
+  }, [userId, friends, friendKey, blockKey, notificationPrefs, prefsKey, loadHiddenIds])
 
   useEffect(() => {
     if (!userId) {
       setPulsos([])
+      setHiddenIds([])
       setAlerts([])
       setHydratedFor(null)
       return undefined
@@ -252,30 +292,35 @@ export function PulsosProvider({ children }) {
 
     if (!isSupabaseConfigured) {
       let cancelled = false
-      hydratePulsos(loadDemoPulsos(userId, friends)).then((local) => {
-        if (!cancelled) {
-          setPulsos(local)
-          setAlerts(ingestPulsoAlerts(userId, local, friends))
-          setHydratedFor(userId)
-        }
-      })
+      Promise.all([hydratePulsos(loadDemoPulsos(userId, friends)), loadHiddenIds()]).then(
+        ([local, hides]) => {
+          if (!cancelled) {
+            setPulsos(local)
+            setHiddenIds(hides)
+            setAlerts(ingestPulsoAlerts(userId, local, friends, notificationPrefs))
+            setHydratedFor(userId)
+          }
+        },
+      )
       return () => {
         cancelled = true
       }
     }
 
     let cancelled = false
-    loadRemotePulsos(userId)
-      .then((remote) => {
+    Promise.all([loadRemotePulsos(userId), loadHiddenIds()])
+      .then(([remote, hides]) => {
         if (!cancelled) {
           setPulsos(remote)
-          setAlerts(ingestPulsoAlerts(userId, remote, friends))
+          setHiddenIds(hides)
+          setAlerts(ingestPulsoAlerts(userId, remote, friends, notificationPrefs))
           setHydratedFor(userId)
         }
       })
       .catch(() => {
         if (!cancelled) {
           setPulsos([])
+          setHiddenIds([])
           setHydratedFor(userId)
         }
       })
@@ -283,7 +328,7 @@ export function PulsosProvider({ children }) {
     return () => {
       cancelled = true
     }
-  }, [userId, friendKey, blockKey])
+  }, [userId, friendKey, blockKey, prefsKey, notificationPrefs, loadHiddenIds])
 
   useEffect(() => {
     if (!userId || hydratedFor !== userId || isSupabaseConfigured) return
@@ -316,6 +361,9 @@ export function PulsosProvider({ children }) {
           refreshPulsos()
         })
         .on('postgres_changes', { event: '*', schema: 'public', table: 'pulso_comments' }, () => {
+          refreshPulsos()
+        })
+        .on('postgres_changes', { event: '*', schema: 'public', table: 'pulso_reactions' }, () => {
           refreshPulsos()
         })
         .subscribe()
@@ -407,7 +455,10 @@ export function PulsosProvider({ children }) {
           return { data: null, error: uploaded.error }
         }
 
-        const nextPulso = normalizePulso({ ...data, photos: uploaded.photos, comments: [] }, authorName)
+        const nextPulso = normalizePulso(
+          { ...data, photos: uploaded.photos, comments: [], reactions: [] },
+          authorName,
+        )
         setPulsos((current) => [nextPulso, ...current.filter((item) => item.id !== nextPulso.id)])
         return { data: nextPulso, error: null }
       }
@@ -429,6 +480,7 @@ export function PulsosProvider({ children }) {
           author: authorName,
           photos: uploaded.photos,
           comments: [],
+          reactions: [],
           ...payload,
         },
         authorName,
@@ -772,14 +824,206 @@ export function PulsosProvider({ children }) {
 
   const createPulso = useCallback(async (newPulso) => criarPulso(newPulso), [criarPulso])
 
+  const patchReactions = useCallback((pulsoId, updater) => {
+    setPulsos((list) =>
+      list.map((item) => {
+        if (item.id !== pulsoId) return item
+        return { ...item, reactions: updater(item.reactions || []) }
+      }),
+    )
+  }, [])
+
+  const reagirPulso = useCallback(
+    async (pulsoId, emoji) => {
+      if (!isAllowedReactionEmoji(emoji)) {
+        return { data: null, error: { message: 'Reação inválida.' } }
+      }
+
+      const current = pulsos.find((item) => item.id === pulsoId)
+      if (!current) {
+        return { data: null, error: { message: 'Pulso não encontrado.' } }
+      }
+      if (isBlockedPair(userId, current.user_id)) {
+        return { data: null, error: { message: 'Não é possível reagir a este pulso.' } }
+      }
+
+      const authorName = user?.user_metadata?.name ?? 'Você'
+      const existing = (current.reactions || []).find((reaction) => reaction.user_id === userId)
+
+      if (existing?.emoji === emoji) {
+        if (isSupabaseConfigured && supabase) {
+          const { error } = await supabase.from('pulso_reactions').delete().eq('id', existing.id)
+          if (error) {
+            return { data: null, error: { message: 'Não foi possível remover a reação.' } }
+          }
+        }
+
+        patchReactions(pulsoId, (list) => list.filter((reaction) => reaction.id !== existing.id))
+        if (!isSupabaseConfigured && userId) {
+          const ownerStored = readStoredPulsos(current.user_id)
+          writeStoredPulsos(
+            current.user_id,
+            ownerStored.map((item) =>
+              item.id === pulsoId
+                ? {
+                    ...item,
+                    reactions: (item.reactions || []).filter((reaction) => reaction.id !== existing.id),
+                  }
+                : item,
+            ),
+          )
+        }
+        return { data: null, error: null }
+      }
+
+      if (isSupabaseConfigured && supabase) {
+        const { data, error } = await supabase
+          .from('pulso_reactions')
+          .upsert(
+            {
+              pulso_id: pulsoId,
+              user_id: userId,
+              emoji,
+              created_at: new Date().toISOString(),
+            },
+            { onConflict: 'pulso_id,user_id' },
+          )
+          .select('id, pulso_id, user_id, emoji, created_at')
+          .single()
+
+        if (error || !data) {
+          return { data: null, error: { message: 'Não foi possível salvar a reação.' } }
+        }
+
+        const reaction = normalizeReaction(data, authorName)
+        patchReactions(pulsoId, (list) => {
+          const withoutMine = list.filter((item) => item.user_id !== userId)
+          return [...withoutMine, reaction]
+        })
+        return { data: reaction, error: null }
+      }
+
+      const reaction = normalizeReaction(
+        {
+          id: existing?.id || crypto.randomUUID(),
+          pulso_id: pulsoId,
+          user_id: userId,
+          emoji,
+          created_at: existing?.created_at || new Date().toISOString(),
+        },
+        authorName,
+      )
+      patchReactions(pulsoId, (list) => {
+        const withoutMine = list.filter((item) => item.user_id !== userId)
+        return [...withoutMine, reaction]
+      })
+      if (userId) {
+        const ownerStored = readStoredPulsos(current.user_id)
+        writeStoredPulsos(
+          current.user_id,
+          ownerStored.some((item) => item.id === pulsoId)
+            ? ownerStored.map((item) =>
+                item.id === pulsoId
+                  ? {
+                      ...item,
+                      reactions: [
+                        ...(item.reactions || []).filter((entry) => entry.user_id !== userId),
+                        reaction,
+                      ],
+                    }
+                  : item,
+              )
+            : [{ ...current, reactions: [reaction] }, ...ownerStored],
+        )
+      }
+      return { data: reaction, error: null }
+    },
+    [pulsos, userId, user, patchReactions],
+  )
+
+  const hiddenIdSet = useMemo(() => new Set(hiddenIds), [hiddenIds])
+
+  const timelinePulsos = useMemo(
+    () => pulsos.filter((pulso) => !hiddenIdSet.has(pulso.id)),
+    [pulsos, hiddenIdSet],
+  )
+
+  const hiddenPulsos = useMemo(
+    () =>
+      pulsos
+        .filter((pulso) => hiddenIdSet.has(pulso.id))
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()),
+    [pulsos, hiddenIdSet],
+  )
+
+  const ocultarPulso = useCallback(
+    async (pulsoId) => {
+      if (!userId || !pulsoId) {
+        return { error: { message: 'Não foi possível ocultar o pulso.' } }
+      }
+      if (!pulsos.some((item) => item.id === pulsoId)) {
+        return { error: { message: 'Pulso não encontrado.' } }
+      }
+      if (hiddenIdSet.has(pulsoId)) return { error: null }
+
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase.from('pulso_hides').insert({
+          user_id: userId,
+          pulso_id: pulsoId,
+        })
+        if (error && error.code !== '23505') {
+          return { error: { message: 'Não foi possível ocultar o pulso.' } }
+        }
+      }
+
+      const next = [...new Set([...hiddenIds, pulsoId])]
+      setHiddenIds(next)
+      if (!isSupabaseConfigured) writeStoredPulsoHides(userId, next)
+      return { error: null }
+    },
+    [userId, pulsos, hiddenIds, hiddenIdSet],
+  )
+
+  const mostrarPulso = useCallback(
+    async (pulsoId) => {
+      if (!userId || !pulsoId) {
+        return { error: { message: 'Não foi possível restaurar o pulso.' } }
+      }
+      if (!hiddenIdSet.has(pulsoId)) return { error: null }
+
+      if (isSupabaseConfigured && supabase) {
+        const { error } = await supabase
+          .from('pulso_hides')
+          .delete()
+          .eq('user_id', userId)
+          .eq('pulso_id', pulsoId)
+        if (error) {
+          return { error: { message: 'Não foi possível restaurar o pulso.' } }
+        }
+      }
+
+      const next = hiddenIds.filter((id) => id !== pulsoId)
+      setHiddenIds(next)
+      if (!isSupabaseConfigured) writeStoredPulsoHides(userId, next)
+      return { error: null }
+    },
+    [userId, hiddenIds, hiddenIdSet],
+  )
+
   const visibleAlerts = useMemo(
-    () => alerts.filter((alert) => shouldNotifyAbout(alert.authorId, friends, userId)),
-    [alerts, friends, userId],
+    () =>
+      alerts.filter(
+        (alert) =>
+          !hiddenIdSet.has(alert.id) &&
+          alertStillMatches(alert, friends, userId, notificationPrefs),
+      ),
+    [alerts, friends, userId, notificationPrefs, prefsKey, hiddenIdSet],
   )
 
   const value = useMemo(
     () => ({
-      pulsos,
+      pulsos: timelinePulsos,
+      hiddenPulsos,
       alerts: visibleAlerts,
       createPulso,
       criarPulso,
@@ -788,10 +1032,14 @@ export function PulsosProvider({ children }) {
       comentarPulso,
       editarComentario,
       excluirComentario,
+      reagirPulso,
+      ocultarPulso,
+      mostrarPulso,
       refreshPulsos,
     }),
     [
-      pulsos,
+      timelinePulsos,
+      hiddenPulsos,
       visibleAlerts,
       createPulso,
       criarPulso,
@@ -800,6 +1048,9 @@ export function PulsosProvider({ children }) {
       comentarPulso,
       editarComentario,
       excluirComentario,
+      reagirPulso,
+      ocultarPulso,
+      mostrarPulso,
       refreshPulsos,
     ],
   )

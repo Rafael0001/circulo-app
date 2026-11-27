@@ -1,5 +1,5 @@
-import { AlertTriangle, Clock, Pencil, Trash2, Zap } from 'lucide-react'
-import { useState } from 'react'
+import { AlertTriangle, Clock, Eye, EyeOff, MoreHorizontal, Pencil, Trash2, Zap } from 'lucide-react'
+import { useEffect, useId, useRef, useState } from 'react'
 import { useAuth } from '../hooks/useAuth'
 import { usePulsos } from '../hooks/usePulsos'
 import { durationLabel, hasDefinedDuration } from '../lib/pulsoVisibility'
@@ -7,6 +7,7 @@ import { absoluteTimeFrom, relativeTimeFrom } from '../lib/relativeTime'
 import PulsoComments from './PulsoComments'
 import PulsoPhotoGrid from './PulsoPhotoGrid'
 import PulsoPhotoPicker from './PulsoPhotoPicker'
+import PulsoReactions from './PulsoReactions'
 
 const priorityFlags = {
   is_importante: {
@@ -21,25 +22,49 @@ const priorityFlags = {
   },
 }
 
-export default function PulsoCard({ pulso }) {
+export default function PulsoCard({ pulso, hidden = false }) {
   const { user } = useAuth()
-  const { editarPulso, excluirPulso } = usePulsos()
+  const { editarPulso, excluirPulso, ocultarPulso, mostrarPulso } = usePulsos()
   const isAuthor = Boolean(user?.id && pulso.user_id === user.id)
   const activeFlags = Object.entries(priorityFlags).filter(([key]) => pulso[key])
   const totalDuration = hasDefinedDuration(pulso.duration_hours) ? pulso.duration_hours : null
+  const menuId = useId()
+  const menuRef = useRef(null)
 
   const [editing, setEditing] = useState(false)
   const [confirmingDelete, setConfirmingDelete] = useState(false)
+  const [menuOpen, setMenuOpen] = useState(false)
   const [draft, setDraft] = useState(pulso.content || '')
   const [draftPhotos, setDraftPhotos] = useState(pulso.photos || [])
   const [error, setError] = useState('')
   const [busy, setBusy] = useState(false)
+
+  useEffect(() => {
+    if (!menuOpen) return undefined
+
+    const onPointerDown = (event) => {
+      if (menuRef.current && !menuRef.current.contains(event.target)) {
+        setMenuOpen(false)
+      }
+    }
+    const onKeyDown = (event) => {
+      if (event.key === 'Escape') setMenuOpen(false)
+    }
+
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [menuOpen])
 
   const startEdit = () => {
     setDraft(pulso.content || '')
     setDraftPhotos(pulso.photos || [])
     setError('')
     setConfirmingDelete(false)
+    setMenuOpen(false)
     setEditing(true)
   }
 
@@ -66,6 +91,22 @@ export default function PulsoCard({ pulso }) {
     if (deleteError) {
       setError(deleteError.message || 'Não foi possível excluir o pulso.')
       setConfirmingDelete(false)
+    }
+  }
+
+  const handleHideToggle = async () => {
+    setBusy(true)
+    setError('')
+    setMenuOpen(false)
+    const { error: hideError } = hidden
+      ? await mostrarPulso(pulso.id)
+      : await ocultarPulso(pulso.id)
+    setBusy(false)
+    if (hideError) {
+      setError(
+        hideError.message ||
+          (hidden ? 'Não foi possível restaurar o pulso.' : 'Não foi possível ocultar o pulso.'),
+      )
     }
   }
 
@@ -126,6 +167,7 @@ export default function PulsoCard({ pulso }) {
                 type="button"
                 onClick={() => {
                   setConfirmingDelete(true)
+                  setMenuOpen(false)
                   setError('')
                 }}
                 className="rounded-full p-1.5 text-[#8a4a38] hover:bg-[#fff1ed]"
@@ -135,6 +177,47 @@ export default function PulsoCard({ pulso }) {
               </button>
             </>
           )}
+          {!editing && user?.id ? (
+            <div ref={menuRef} className="relative">
+              <button
+                type="button"
+                onClick={() => setMenuOpen((open) => !open)}
+                className="rounded-full p-1.5 text-[#8a7463] hover:bg-[#f7efe6]"
+                aria-label="Mais ações"
+                aria-expanded={menuOpen}
+                aria-controls={menuId}
+              >
+                <MoreHorizontal className="h-3.5 w-3.5" />
+              </button>
+              {menuOpen ? (
+                <div
+                  id={menuId}
+                  role="menu"
+                  className="absolute right-0 z-20 mt-1 min-w-[11.5rem] rounded-2xl border border-[#eddcc7] bg-white p-1 shadow-[0_12px_28px_rgba(60,40,20,0.14)]"
+                >
+                  <button
+                    type="button"
+                    role="menuitem"
+                    disabled={busy}
+                    onClick={handleHideToggle}
+                    className="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-[#2f2c2a] hover:bg-[#fff4e4] disabled:opacity-50"
+                  >
+                    {hidden ? (
+                      <>
+                        <Eye className="h-3.5 w-3.5 text-[#8a7463]" />
+                        Mostrar na timeline
+                      </>
+                    ) : (
+                      <>
+                        <EyeOff className="h-3.5 w-3.5 text-[#8a7463]" />
+                        Ocultar Pulso
+                      </>
+                    )}
+                  </button>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </div>
 
@@ -207,7 +290,12 @@ export default function PulsoCard({ pulso }) {
 
       {error ? <p className="mt-2 text-sm text-[#b42318]">{error}</p> : null}
 
-      {!editing ? <PulsoComments pulso={pulso} /> : null}
+      {!editing ? (
+        <>
+          <PulsoReactions pulso={pulso} />
+          <PulsoComments pulso={pulso} />
+        </>
+      ) : null}
     </article>
   )
 }

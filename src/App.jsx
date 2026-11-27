@@ -13,9 +13,11 @@ import AdicionarAmigo from './pages/AdicionarAmigo'
 import Convite from './pages/Convite'
 import CriarPulso from './pages/CriarPulso'
 import ConfigurarCirculos from './pages/ConfigurarCirculos'
+import ConfigurarNotificacoes from './pages/ConfigurarNotificacoes'
 import Perfil from './pages/Perfil'
 import OfflineBanner from './components/OfflineBanner'
 import PwaInstallBanner from './components/PwaInstallBanner'
+import { NotificationPrefsProvider } from './hooks/useNotificationPreferences'
 
 function LoadingScreen() {
   return (
@@ -126,6 +128,14 @@ function AppRoutes() {
                 }
               />
               <Route
+                path="/configurar-notificacoes"
+                element={
+                  <ProtectedRoute>
+                    <ConfigurarNotificacoes />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
                 path="/perfil"
                 element={
                   <ProtectedRoute>
@@ -150,13 +160,15 @@ export default function App() {
   return (
     <AuthProvider>
       <FriendsProvider>
-        <PulsosProvider>
-          <BrowserRouter>
-            <OfflineBanner />
-            <AppRoutes />
-            <PwaInstallBanner />
-          </BrowserRouter>
-        </PulsosProvider>
+        <NotificationPrefsProvider>
+          <PulsosProvider>
+            <BrowserRouter>
+              <OfflineBanner />
+              <AppRoutes />
+              <PwaInstallBanner />
+            </BrowserRouter>
+          </PulsosProvider>
+        </NotificationPrefsProvider>
       </FriendsProvider>
     </AuthProvider>
   )
