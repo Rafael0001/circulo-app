@@ -28,10 +28,7 @@ export default function Home() {
       <header className="mb-5 flex items-center justify-between gap-3">
         <div className="flex items-center gap-3">
           <BrandMark variant="pulsar" size="sm" showLabel={false} label="Círculo" />
-          <div>
-            <p className="text-micro font-semibold uppercase tracking-[0.28em] text-ink-muted">seu círculo</p>
-            <h1 className="mt-0.5 font-display text-title text-ink">Círculo</h1>
-          </div>
+          <h1 className="font-display text-title text-ink">Círculo</h1>
         </div>
         <div className="rounded-pill bg-paper-deep px-3 py-1.5 text-micro font-semibold uppercase tracking-[0.14em] text-ring-olive">
           {friends.length} amigos
