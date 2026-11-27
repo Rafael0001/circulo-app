@@ -2,6 +2,7 @@ import { useMemo, useState } from 'react'
 import NavBar from '../components/NavBar'
 import CirculoViz from '../components/CirculoViz'
 import PulsoCard from '../components/PulsoCard'
+import { BrandMark } from '../components/ui'
 import { useFriends } from '../hooks/useFriends'
 import { usePulsos } from '../hooks/usePulsos'
 
@@ -25,11 +26,14 @@ export default function Home() {
   return (
     <div className="mx-auto flex min-h-screen max-w-md flex-col px-4 pb-28 pt-6">
       <header className="mb-5 flex items-center justify-between gap-3">
-        <div>
-          <p className="text-[10px] font-semibold uppercase tracking-[0.3em] text-[#90795e]">seu círculo</p>
-          <h1 className="mt-1 text-3xl font-semibold text-[#2e2926]">Círculo</h1>
+        <div className="flex items-center gap-3">
+          <BrandMark variant="pulsar" size="sm" showLabel={false} label="Círculo" />
+          <div>
+            <p className="text-micro font-semibold uppercase tracking-[0.28em] text-ink-muted">seu círculo</p>
+            <h1 className="mt-0.5 font-display text-title text-ink">Círculo</h1>
+          </div>
         </div>
-        <div className="rounded-full bg-[#f7e8d2] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[#8b5f38]">
+        <div className="rounded-pill bg-paper-deep px-3 py-1.5 text-micro font-semibold uppercase tracking-[0.14em] text-ring-olive">
           {friends.length} amigos
         </div>
       </header>

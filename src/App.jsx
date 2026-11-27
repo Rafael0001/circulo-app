@@ -12,7 +12,14 @@ function ProtectedRoute({ children }) {
 
   if (loading) {
     return (
-      <div className="flex min-h-screen items-center justify-center bg-[#f8f4ee] text-sm font-medium uppercase tracking-[0.2em] text-[#7c6a5f]">
+      <div className="flex min-h-screen flex-col items-center justify-center gap-4 bg-paper text-sm font-medium uppercase tracking-[0.2em] text-ink-muted">
+        <img
+          src="/brand/circulo-logo-rings-light.png"
+          alt=""
+          width={88}
+          height={88}
+          className="brand-breathe object-contain"
+        />
         Carregando círculo...
       </div>
     )
