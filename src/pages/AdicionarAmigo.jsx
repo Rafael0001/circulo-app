@@ -85,7 +85,7 @@ export default function AdicionarAmigo() {
 
   const handleShare = async () => {
     if (!link) return
-    if (navigator.share) {
+    if (typeof navigator.share === 'function') {
       try {
         await navigator.share({
           title: 'Círculo',
@@ -93,8 +93,9 @@ export default function AdicionarAmigo() {
           url: link,
         })
         return
-      } catch {
-        // user cancelled or share failed — fall through to copy
+      } catch (error) {
+        if (error?.name === 'AbortError') return
+        // share unavailable in this context — fall through to copy
       }
     }
     handleCopy(link, 'link')

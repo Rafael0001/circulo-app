@@ -14,6 +14,8 @@ import Convite from './pages/Convite'
 import CriarPulso from './pages/CriarPulso'
 import ConfigurarCirculos from './pages/ConfigurarCirculos'
 import Perfil from './pages/Perfil'
+import OfflineBanner from './components/OfflineBanner'
+import PwaInstallBanner from './components/PwaInstallBanner'
 
 function LoadingScreen() {
   return (
@@ -150,7 +152,9 @@ export default function App() {
       <FriendsProvider>
         <PulsosProvider>
           <BrowserRouter>
+            <OfflineBanner />
             <AppRoutes />
+            <PwaInstallBanner />
           </BrowserRouter>
         </PulsosProvider>
       </FriendsProvider>
